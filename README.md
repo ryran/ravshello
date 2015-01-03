@@ -1,4 +1,11 @@
 ravshello
 =========
 
-The Ravello Shell -- Interface with Ravello Systems from the command-line to create &amp; manage apps hosted around the world
+Do you have an account with ravellosystems.com?
+
+Do you want to use the command-line to manage your account?
+
+**Check this out.**
+
+
+*(FIXME: Sexy screenshots and real intro text.)*
