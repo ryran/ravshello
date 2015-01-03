@@ -7,5 +7,12 @@ Do you want to use the command-line to manage your account?
 
 **Check this out.**
 
+screenshots
+===========
 
-*(FIXME: Sexy screenshots and real intro text.)*
+![help page](http://people.redhat.com/rsawhill/ravshello/
+![aa](http://people.redhat.com/rsawhill/ravshello/
+![aa](http://people.redhat.com/rsawhill/ravshello/
+![aa](http://people.redhat.com/rsawhill/ravshello/
+![aa](http://people.redhat.com/rsawhill/ravshello/
+![aa](http://people.redhat.com/rsawhill/ravshello/
