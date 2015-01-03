@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright 2014 Ravshello Authors
+# Copyright 2015 Ravshello Authors
 # License: Apache License 2.0 (see LICENSE or http://apache.org/licenses/LICENSE-2.0.html)
 
 from __future__ import print_function
@@ -9,7 +9,12 @@ from sys import exit as sysexit
 
 # Custom modules
 import rsaw_ascii
-from ravello_sdk import *
+try:
+    from ravello_sdk import *
+except:
+    print("Missing a required python module (ravello_sdk)\n"
+          "Get it from https://github.com/ryran/python-sdk\n")
+    raise
 from local_config import RavelloLogin 
 
 

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright 2014 Ravshello Authors
+# Copyright 2015 Ravshello Authors
 # License: Apache License 2.0 (see LICENSE or http://apache.org/licenses/LICENSE-2.0.html)
 
 from __future__ import print_function
@@ -23,7 +23,7 @@ try:
     from configshell import shell as cfshell, ConfigNode
 except:
     print("Missing a required python module (configshell)\n"
-          "On RHEL/Fedora, install it with:\n"
+          "On RHEL/Fedora, install it with command:\n"
           "                        yum install python-configshell\n")
     raise
 # Remove configshell commands that we don't need or want
@@ -33,7 +33,12 @@ del ConfigNode.ui_complete_bookmarks
 
 # Custom ravshello modules
 import rsaw_ascii
-from ravello_sdk import *
+try:
+    from ravello_sdk import *
+except:
+    print("Missing a required python module (ravello_sdk)\n"
+          "Get it from https://github.com/ryran/python-sdk\n")
+    raise
 from local_config import RavshelloUI 
 
 
