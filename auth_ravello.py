@@ -5,7 +5,7 @@
 from __future__ import print_function
 
 # Modules from standard library
-from sys import exit as sysexit
+import sys
 
 # Custom modules
 import rsaw_ascii
@@ -49,7 +49,7 @@ def login(opt):
     
     verbose("\nConnecting to Ravello . . .")
     
-    # Get Ravello user creds from cmdline or configfileusing admin username/pass
+    # Get Ravello user creds from cmdline or configfile using admin username/pass
     if cfgFile.ravelloUser and not ravshOpt.ravelloUser:
         ravshOpt.ravelloUser = cfgFile.ravelloUser
     if cfgFile.ravelloPass and not ravshOpt.ravelloPass:
@@ -62,7 +62,7 @@ def login(opt):
               "\nOtherwise, try updating ravshello")
         if cfgFile.unableToLoginAdditionalMsg:
             print(cfgFile.unableToLoginAdditionalMsg)
-        sysexit(5)
+        sys.exit(5)
     del ravshOpt.ravelloUser, ravshOpt.ravelloPass
     
     print(c.GREEN("  Logged in to Ravello as "), end='')
