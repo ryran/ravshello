@@ -17,12 +17,12 @@
 #-------------------------------------------------------------------------------
 
 from __future__ import print_function
-ravshelloVersion = "ravshello v1.2.1 last mod 2015/01/03"
+ravshelloVersion = "ravshello v1.2.2 last mod 2015/01/04"
 
 # Modules from standard library
 import argparse
-from os import path
-from sys import exit as sysexit
+import os
+import sys
 from getpass import getpass
 
 # Custom ravshello modules
@@ -93,7 +93,7 @@ if __name__ == "__main__":
     # Help?
     if ravshOpt.showHelp:
         p.print_help()
-        sysexit()
+        sys.exit()
     
     # Unpack COMMAND
     ravshOpt.cmdlineArgs = " ".join(ravshOpt.cmdlineArgs)
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     ravshOpt.ravshelloVersion = ravshelloVersion
         
     # Set config dir
-    ravshOpt.userCfgDir = path.expanduser('~/.ravshello')
+    ravshOpt.userCfgDir = os.path.expanduser('~/.ravshello')
     
     # Can create apps in learner mode only from blueprints with one of these in their description
     ravshOpt.learnerBlueprintTag = ['#is_learner_blueprint', '#learner_bp']
@@ -146,4 +146,4 @@ if __name__ == "__main__":
     
     except KeyboardInterrupt:
         print()
-        sysexit()
+        sys.exit()
