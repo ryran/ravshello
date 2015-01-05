@@ -17,7 +17,8 @@
 #-------------------------------------------------------------------------------
 
 from __future__ import print_function
-ravshelloVersion = "ravshello v1.2.2 last mod 2015/01/04"
+
+ravshelloVersion = "ravshello v1.2.3 last mod 2015/01/05"
 
 # Modules from standard library
 import argparse

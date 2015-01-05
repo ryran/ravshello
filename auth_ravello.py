@@ -2,9 +2,8 @@
 # Copyright 2015 Ravshello Authors
 # License: Apache License 2.0 (see LICENSE or http://apache.org/licenses/LICENSE-2.0.html)
 
-from __future__ import print_function
-
 # Modules from standard library
+from __future__ import print_function
 import sys
 
 # Custom modules
@@ -42,7 +41,6 @@ def login(opt):
     global ravshOpt, c
     ravshOpt = opt    
     c = rsaw_ascii.AsciiColors(ravshOpt.enableAsciiColors)
-    user = ravshOpt.user
     
     # Create client object
     ravClient = RavelloClient()
