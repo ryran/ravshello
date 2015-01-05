@@ -4,10 +4,17 @@
 
 # Modules from standard library
 from __future__ import print_function
-    
+import re
+
+
+# ConfigShell can only handle certain characters in pathnames
+validChars = ['A-Z', 'a-z', '0-9', ':', '_', '.', '-']
+invalidCharsRegex = '[^A-Za-z0-9:_.-]'
+
+
 def replace_bad_chars_with_underscores(string):
     """Perform some simple character translation/substitution on *string*."""
-    return string.replace('@', '_').replace(' ', '_').replace('+', '_')
+    return re.sub(pattern=invalidCharsRegex, repl='_', string=string)
 
 
 class AsciiColors:

@@ -5,6 +5,7 @@
 # Modules from standard library
 from __future__ import print_function
 import sys
+from getpass import getpass
 
 # Custom modules
 import rsaw_ascii
@@ -36,8 +37,19 @@ def is_admin():
         return False
 
 
+def get_passphrase(prompt="Enter passphrase: ", defaultPass=None):
+    """Prompt for a passphrase, allowing pre-populated *defaultPass*."""
+    pwd = getpass(prompt=prompt)
+    while not len(pwd):
+        if defaultPass:
+            pwd = defaultPass
+        else:
+            pwd = getpass(prompt="    You must enter a passphrase: ")
+    return pwd
+
+
 def login(opt):
-    
+    """Determine Ravello credentials and login via RavelloClient object"""
     global ravshOpt, c
     ravshOpt = opt    
     c = rsaw_ascii.AsciiColors(ravshOpt.enableAsciiColors)
@@ -47,17 +59,26 @@ def login(opt):
     
     verbose("\nConnecting to Ravello . . .")
     
-    # Get Ravello user creds from cmdline or configfile using admin username/pass
-    if cfgFile.ravelloUser and not ravshOpt.ravelloUser:
-        ravshOpt.ravelloUser = cfgFile.ravelloUser
-    if cfgFile.ravelloPass and not ravshOpt.ravelloPass:
-        ravshOpt.ravelloPass = cfgFile.ravelloPass
+    # If necessary, get Ravello username from configfile or prompt
+    if not ravshOpt.ravelloUser:
+        if cfgFile.ravelloUser:
+            ravshOpt.ravelloUser = cfgFile.ravelloUser
+        else:
+            ravshOpt.ravelloUser = raw_input(c.CYAN("  Enter Ravello username: "))
+    
+    # If necessary, get Ravello password from configfile or prompt
+    if not ravshOpt.ravelloPass:
+        if cfgFile.ravelloPass:
+            ravshOpt.ravelloPass = cfgFile.ravelloPass
+        else:
+            ravshOpt.ravelloPass = get_passphrase(c.CYAN("  Enter Ravello passphrase: "))
+    
+    # Try to log in
     try:
         ravClient.login(ravshOpt.ravelloUser, ravshOpt.ravelloPass)
     except:
-        print(c.RED("  Unable to login to Ravello!"))
-        print("\nIf you have your own Ravello login, you should use the -u & -p options" +
-              "\nOtherwise, try updating ravshello")
+        print(c.RED("  Logging in to Ravello failed!"))
+        print("\nIf you're sure your Ravello credentials are correct, try updating ravshello")
         if cfgFile.unableToLoginAdditionalMsg:
             print(cfgFile.unableToLoginAdditionalMsg)
         sys.exit(5)
