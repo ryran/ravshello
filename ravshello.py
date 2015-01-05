@@ -18,27 +18,15 @@
 
 from __future__ import print_function
 
-ravshelloVersion = "ravshello v1.2.3 last mod 2015/01/05"
+ravshelloVersion = "ravshello v1.2.4 last mod 2015/01/05"
 
 # Modules from standard library
 import argparse
 import os
 import sys
-from getpass import getpass
 
 # Custom ravshello modules
 import rsaw_ascii, auth_local, auth_ravello, user_interface
-
-
-def get_passphrase(prompt="Enter passphrase: ", defaultPass=None):
-    """Prompt for a passphrase, allowing pre-populated *defaultPass*."""
-    pwd = getpass(prompt=prompt)
-    while not len(pwd):
-        if defaultPass:
-            pwd = defaultPass
-        else:
-            pwd = getpass(prompt="You must enter a passphrase: ")
-    return pwd
 
 
 if __name__ == "__main__":
@@ -67,6 +55,9 @@ if __name__ == "__main__":
     grpU.add_argument('-p', dest='ravelloPass', metavar='PASSWD', default='',
         help="Explicitly specify a Ravello user password on the command-line " +
              "(unsafe on multi-user system)")
+    grpU.add_argument('-k', '--nick', dest='promptNickname', action='store_true',
+        help="Prompt for nickname to use for app-filtering (nickname is normally " + 
+             "determined from the system user name)")
     grpU.add_argument('-n', '--nocolor', dest='enableAsciiColors', action='store_false',
         help="Disable all color terminal enhancements")
     grpU.add_argument('--clearprefs', dest='clearPreferences', action='store_true',
@@ -99,10 +90,6 @@ if __name__ == "__main__":
     # Unpack COMMAND
     ravshOpt.cmdlineArgs = " ".join(ravshOpt.cmdlineArgs)
     
-    # Tweak Ravello account user/pass
-    if ravshOpt.ravelloUser and not ravshOpt.ravelloPass:
-        ravshOpt.ravelloPass = get_passphrase("Enter Ravello passphrase: ")
-    
     # Trigger -a if -A was called
     if ravshOpt.showAllApps:
         ravshOpt.enableAdminFuncs = True
@@ -129,7 +116,7 @@ if __name__ == "__main__":
     # Liftoff
     try:
         
-        # 1.) First step: establish a local user name to use in ravshello
+        # 1.) Establish a local user name to use in ravshello
         #     This name is arbitrary and has nothing to do with Ravello login creds
         #     It is used:
         #       - To construct names for new apps

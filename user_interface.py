@@ -1668,13 +1668,17 @@ class Applications(ConfigNode):
                 # Prompt for name if admin
                 a = raw_input(c.CYAN("\nEnter a name for your new application [{}]: ".format(appName)))
                 if len(a):
-                    if ' ' in a or '@' in a or '+' in a:
-                        print(c.red("\nNote that ravshello has trouble navigating to directories with spaces, @ and + signs\n"
-                                    "In order to do so, one would have to use the *interactive* cd command with arrow keys"))
+                    aFixed = rsaw_ascii.replace_bad_chars_with_underscores(a)
+                    if a != aFixed:
+                        print(c.red("\nNote that configshell (which ravshello uses) won't accept certain chars in paths\n"
+                                    "Namely, only the following are allowed: A-Za-z0-9:_.-\n"
+                                    "In order handle apps with characters BESIDES those, one would have to use the\n"
+                                    "*interactive* cd command with arrow keys"))
                         response = raw_input(c.CYAN("\nReplace bad characters with underscores? [y/N] "))
                         if response == 'y':
-                            a = rsaw_ascii.replace_bad_chars_with_underscores(a)
-                    appName = a
+                            appName = aFixed
+                        else:
+                            appName = a
         else:
             appName = name
             
