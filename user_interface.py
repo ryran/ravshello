@@ -2,9 +2,8 @@
 # Copyright 2015 Ravshello Authors
 # License: Apache License 2.0 (see LICENSE or http://apache.org/licenses/LICENSE-2.0.html)
 
-from __future__ import print_function
-
 # Modules from standard library
+from __future__ import print_function
 import json
 import subprocess
 import termios
@@ -196,10 +195,6 @@ def slow_print(string, interval=.02):
         print(char, end='')
         stdout.flush()
     print()
-
-def replace_bad_chars_with_underscores(string):
-    """Perform some simple character translation/substitution on *string*."""
-    return string.replace('@', '_').replace(' ', '_').replace('+', '_')
 
 def sync_file_with_str(outfile, string, perms=0600):
     """Save *string* to *outfile*"""
@@ -1667,7 +1662,7 @@ class Applications(ConfigNode):
         
         if name == '@prompt' or name == '@auto':
             # Set default app name based off blueprint name
-            appName = replace_bad_chars_with_underscores(baseBlueprintName)
+            appName = rsaw_ascii.replace_bad_chars_with_underscores(baseBlueprintName)
             
             if is_admin() and name == '@prompt':
                 # Prompt for name if admin
@@ -1678,7 +1673,7 @@ class Applications(ConfigNode):
                                     "In order to do so, one would have to use the *interactive* cd command with arrow keys"))
                         response = raw_input(c.CYAN("\nReplace bad characters with underscores? [y/N] "))
                         if response == 'y':
-                            a = replace_bad_chars_with_underscores(a)
+                            a = rsaw_ascii.replace_bad_chars_with_underscores(a)
                     appName = a
         else:
             appName = name
@@ -2273,11 +2268,11 @@ class App(ConfigNode):
         appDetails = get_app(self.appId)
         for i in range(len(appDetails['design']['vms'])):
             print("\n Generating snapshot for vm ",appDetails['design']['vms'][i]['name'])
-            imageName = replace_bad_chars_with_underscores(appDetails['name'])
+            imageName = rsaw_ascii.replace_bad_chars_with_underscores(appDetails['name'])
             imageName = appnamePrefix + imageName
             a = raw_input("\nEnter a name for your vm image [{}]: ".format(imageName))
             if a:
-                imageName = replace_bad_chars_with_underscores(a)
+                imageName = rsaw_ascii.replace_bad_chars_with_underscores(a)
             applicationId = appDetails['design']['vms'][i]['applicationId']
             vmId = appDetails['design']['vms'][i]['id']
             imageReq = {"applicationId": applicationId, "blueprint": "false", "vmId": vmId, "offline": "true", "imageName": imageName} 

@@ -2,11 +2,13 @@
 # Copyright 2015 Ravshello Authors
 # License: Apache License 2.0 (see LICENSE or http://apache.org/licenses/LICENSE-2.0.html)
 
+# Modules from standard library
 from __future__ import print_function
     
 def replace_bad_chars_with_underscores(string):
     """Perform some simple character translation/substitution on *string*."""
-    return string.replace('@', '_').replace(' ', '_')
+    return string.replace('@', '_').replace(' ', '_').replace('+', '_')
+
 
 class AsciiColors:
     """Essentially a container for ascii colorization methods."""
