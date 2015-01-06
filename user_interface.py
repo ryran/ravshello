@@ -1699,8 +1699,8 @@ class Applications(ConfigNode):
             appDesc = ''
         else:
             appDesc = desc
-            
-        appDesc += "[Created with ravshello {} by k:{}]".format(ravshOpt.ravshelloVersion.split()[1], user)
+        
+        appDesc += "[Created w/ravshello {} by {}]".format(ravshOpt.ravshelloVersion.split()[1], user)
         
         # Build request dictionary
         req = {'name' : appName, 'description' : appDesc, 'baseBlueprintId': baseBlueprintId}
