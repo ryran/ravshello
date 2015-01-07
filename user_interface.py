@@ -33,10 +33,11 @@ del ConfigNode.ui_complete_bookmarks
 # Custom ravshello modules
 import rsaw_ascii
 try:
-    from ravello_sdk import *
+    import ravello_sdk
+    ravello_sdk.is_rsaw_sdk()
 except:
-    print("Missing a required python module (ravello_sdk)\n"
-          "Get it from https://github.com/ryran/python-sdk\n")
+    print("Missing proper version of required python module (rsaw's ravello_sdk)\n"
+          "Get it from https://github.com/ryran/python-sdk/tree/experimental\n")
     raise
 from local_config import RavshelloUI 
 
@@ -1285,7 +1286,7 @@ class Blueprints(ConfigNode):
         # Set default description different depending on whether bp created from file or existing bp
         if not bpFileName:
             # Generate a new blueprint name suggestion based off current one
-            bpName = new_name(ravClient.get_blueprints(), bpDefinition['name'] + '_')
+            bpName = ravello_sdk.new_name(ravClient.get_blueprints(), bpDefinition['name'] + '_')
             bpDescription = "Created by {} as a copy of blueprint '{}'".format(user, bpDefinition['name'])
         else:
             bpName = path.basename(bpFileName)
@@ -1297,7 +1298,7 @@ class Blueprints(ConfigNode):
         
         # Create temporary application from bp
         appName = appnamePrefix + 'BpTempApp'
-        appName = new_name(ravClient.get_applications(), appName + '_')
+        appName = ravello_sdk.new_name(ravClient.get_applications(), appName + '_')
         appDescription = "Temporary app used to restore blueprint from file"
         appDesign = bpDefinition['design']
         appReq = {'name' : appName, 'description' : appDescription, 'design': appDesign}
@@ -1685,7 +1686,7 @@ class Applications(ConfigNode):
         appName = appnamePrefix + appName
         
         # Ensure there's not already an app with that name
-        appName = new_name(ravClient.get_applications(), appName + '_')            
+        appName = ravello_sdk.new_name(ravClient.get_applications(), appName + '_')            
         
         if desc == '@prompt':
             # Prompt for description
@@ -1748,7 +1749,7 @@ class App(ConfigNode):
             cloud = app['deployment']['cloud']
             region = app['deployment']['regionName']
             totalErrorVms = app['deployment']['totalErrorVms']
-            appState = application_state(app)
+            appState = ravello_sdk.application_state(app)
             if isinstance(appState, list):
                 if 'STOPPING' in appState:
                     hazHappy = False
