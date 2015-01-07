@@ -10,10 +10,11 @@ from getpass import getpass
 # Custom modules
 import rsaw_ascii
 try:
-    from ravello_sdk import *
+    import ravello_sdk
+    ravello_sdk.is_rsaw_sdk()
 except:
-    print("Missing a required python module (ravello_sdk)\n"
-          "Get it from https://github.com/ryran/python-sdk\n")
+    print("Missing proper version of required python module (rsaw's ravello_sdk)\n"
+          "Get it from https://github.com/ryran/python-sdk/tree/experimental\n")
     raise
 from local_config import RavelloLogin 
 
@@ -55,7 +56,7 @@ def login(opt):
     c = rsaw_ascii.AsciiColors(ravshOpt.enableAsciiColors)
     
     # Create client object
-    ravClient = RavelloClient()
+    ravClient = ravello_sdk.RavelloClient()
     
     verbose("\nConnecting to Ravello . . .")
     
