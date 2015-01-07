@@ -1,3 +1,4 @@
+ravello_sdk.py
 *.pyc
 *~
 *.egg-info

@@ -16,17 +16,17 @@
 # limitations under the License.
 #-------------------------------------------------------------------------------
 
-from __future__ import print_function
-
-ravshelloVersion = "ravshello v1.2.5 last mod 2015/01/06"
-
 # Modules from standard library
+from __future__ import print_function
 import argparse
 import os
 import sys
 
 # Custom ravshello modules
 import rsaw_ascii, auth_local, auth_ravello, user_interface
+
+# Set version here for now bleh
+ravshelloVersion = "ravshello v1.2.6 last mod 2015/01/07"
 
 
 if __name__ == "__main__":
