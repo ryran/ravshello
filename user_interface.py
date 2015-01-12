@@ -8,6 +8,7 @@ import json
 import subprocess
 import termios
 import re
+import ConfigParser
 from sys import stdout, stdin
 from pydoc import pager
 from time import sleep, time
@@ -39,11 +40,9 @@ except:
     print("Missing proper version of required python module (rsaw's ravello_sdk)\n"
           "Get it from https://github.com/ryran/python-sdk/tree/experimental\n")
     raise
-from local_config import RavshelloUI 
 
 
-cfgFile = RavshelloUI()
-ravshOpt = c = user = ravClient = appnamePrefix = None
+cfg = ravshOpt = c = user = ravClient = appnamePrefix = sshKeyFile = None
 appCache = {}
 alertCache = {}
 userCache = {}
@@ -84,12 +83,21 @@ def get_passphrase(prompt="Enter passphrase: ", defaultPass=None, confirm=False)
 
 def main(opt, client):
     # Set some important globals
-    global ravshOpt, ravClient, user, appnamePrefix, c
+    global cfg, ravshOpt, ravClient, user, appnamePrefix, c, sshKeyFile
     ravshOpt = opt
     ravClient = client
     user = ravshOpt.user
     appnamePrefix = 'k:' + user + '__'
     c = rsaw_ascii.AsciiColors(ravshOpt.enableAsciiColors)
+    cfg = ConfigParser.ConfigParser()
+    cfg.read(ravshOpt.userCfgDir + '/ravshello.conf')
+    try:
+        sshKeyFile = cfg.get('ui', 'sshKeyFile')
+    except:
+        sshKeyFile = None
+    else:
+        if not path.exists(sshKeyFile):
+            sshKeyFile = None
     
     # Clear preferences if asked via cmdline arg
     if ravshOpt.clearPreferences:
@@ -1765,11 +1773,14 @@ class App(ConfigNode):
                     hazHappy = True
             if totalErrorVms > 0:
                 hazHappy = False
-            currentDescription = app['description']
-            m = re.search('_{(.*)}_', currentDescription)
-            if m:
-                note = '; ' + m.group(1)
-            else:
+            try:
+                currentDescription = app['description']
+                m = re.search('_{(.*)}_', currentDescription)
+                if m:
+                    note = '; ' + m.group(1)
+                else:
+                    note = ''
+            except:
                 note = ''
             return ("{} in {} {}{}".format(appState, cloud, region, note), hazHappy)
         else:
@@ -1852,7 +1863,7 @@ class App(ConfigNode):
         except:
             print(c.red("\n\nProblem updating application!\n"))
             raise
-        print(c.green("Done!\n"))
+        print(c.green("DONE!\n"))
         purge_app_cache(self.appId)
         
         if note == '@prompt':
@@ -1936,8 +1947,8 @@ class App(ConfigNode):
         allVmsAreStarted = True
         allVmsAreStopped = True
         key = ''
-        if cfgFile.sshKeyFile:
-            key = ' -i ' + cfgFile.sshKeyFile
+        if sshKeyFile:
+            key = ' -i ' + sshKeyFile
         if expireTime:
             # Prepare expiration times
             absoluteExpireTime = int(str(expireTime)[:-3])
@@ -2014,7 +2025,7 @@ class App(ConfigNode):
     def extend_app_autostop(self, minutes=65):
         if not self.confirm_app_is_published():
             return False
-        req = {'expirationFromNowSeconds' : minutes * 60}
+        req = {'expirationFromNowSeconds': minutes * 60}
         try:
             ravClient.set_application_expiration(self.appId, req)
         except:
@@ -2367,7 +2378,7 @@ class Vm(ConfigNode):
                     return (vm['state'], hazHappy)
         else:
             return ("", None)
-            
+    
     
     def confirm_vm_is_state(self, state):
         for vm in ravClient.get_application(self.appId)['deployment']['vms']:
@@ -2503,3 +2514,192 @@ class Vm(ConfigNode):
             raise
         print(c.yellow("\nVM now restarting\n"))
         purge_app_cache(self.appId)
+    
+    
+    def create_new_vm_image(self, fromBlueprint=False):
+        if fromBlueprint:
+            offline = False
+            imgName = "{}freshImage-{}/{}".format(appnamePrefix, self.appName, self.vmName)
+            message = "Creating new VM image from blueprint design"
+        else:
+            offline = True
+            imgName = "{}snapshot-{}/{}".format(appnamePrefix, self.appName, self.vmName)
+            message = "Shutting down VM and creating snapshot"
+        img = {'applicationId': self.appId,
+               'vmId': self.vmId,
+               'offline': offline,
+               'imageName': imgName}
+        print(c.yellow("\n{} . . . ".format(message)), end='')
+        stdout.flush()
+        try:
+            img = ravClient.create_image(img)
+        except:
+            print(c.red("\n\nProblem creating image!\n"))
+            raise
+        return img
+        print(c.green("DONE!"))
+    
+    
+    def ui_command_pub_app_updates(self):
+        ravClient.publish_application_updates(self.appId)
+    
+    def save_diskImage_to_library(self, hdd):
+        if hdd['name'].startswith(appnamePrefix):
+            counter = int(hdd['name'].split('/')[-1]) + 1
+            hdd['name'] = hdd['name'].split('/')[-2]
+        else:
+            counter = 0
+        newName = "{}{}/{}/{}/{}".format(appnamePrefix, self.appId, self.vmName,
+                                            hdd['name'], counter)
+        img = {'applicationId': self.appId,
+               'vmId': self.vmId,
+               'diskId': hdd['id'],
+               'offline': True,
+               'diskImage': {'name': newName}}
+        return ravClient.create_diskimage(img)
+    
+    def ui_command_make_snapshot(self):
+        """
+        Snapshot all the disks in a VM.
+        
+        As conceived, this is meant to be run with a fresh VM; however, it can be
+        run more than once on the same VM.
+        
+        This will iterate over all the disks, creating new disk images (in the
+        library) from each one. The new disk images will get a name as follows,
+        where n is an integer counter:
+        
+            k:user__appId-appName/vmName/diskName/n
+        
+        After that, the old disk images are deleted.
+        
+        The app will then be configured such that the VM uses snapshots of the
+        new disk images. Finally, the application will be republished.
+        """
+        app = ravClient.get_application(self.appId, 'design')
+        # Determine list index of our VM
+        vmIndex = 0
+        for vm in app['design']['vms']:
+            if vm['id'] == self.vmId:
+                break
+            vmIndex += 1
+        
+        # Save vm for convenience
+        vm = app['design']['vms'][vmIndex]
+        newImages = []
+        print(c.yellow("\nSaving disk image(s) to library"))
+        
+        # Iterate over VM's hard drives: snapshot each one
+        hdds = []
+        for hdd in vm['hardDrives']:
+            hdds.append(hdd['id'])
+            print(c.yellow("{} . . . ".format(hdd['name'])), end='')
+            try:
+                newImages.append(self.save_diskImage_to_library(hdd))
+                print(c.green("DONE"))
+            except:
+                print(c.red("\n\nProblem saving disk image!\n"))
+                raise
+        
+        # Iterate over VM's hard drives: remove id and change base id for each
+        for n in range(len(vm['hardDrives'])):
+            del vm['hardDrives'][n]['id']
+            vm['hardDrives'][n]['baseDiskImageId'] = newImages[n]['id']
+
+        # Update app
+        app['design']['vms'][vmIndex] = vm
+        print(c.yellow("\nUpdating and republishing application . . . "), end='')
+        try:
+            ravClient.update_application(app)
+            ravClient.publish_application_updates(self.appId)
+        except:
+            print(c.red("\n\nProblem updating app!\n"))
+            raise
+        print(c.green("DONE!"))
+        
+        # Cleanup
+        print(c.yellow("\nCleanup: deleting original disk image(s) . . . "))
+        for id in hdds:
+            print(c.yellow("{} . . . ".format(id)), end='')
+            try:
+                ravClient.delete_diskimage(id)
+                print(c.green("DONE"))
+            except:
+                print(c.red("Problem deleting disk image!"))
+        print()
+    
+    
+    def ui_command_reset_vm_to_pristine_diskimage(self):
+        app = ravClient.get_application(self.appId, 'design')
+        
+        # Determine list index of our VM
+        vmIndex = 0
+        for vm in app['design']['vms']:
+            if vm['id'] == self.vmId:
+                break
+            vmIndex += 1
+        
+        # Save vm for convenience
+        vm = app['design']['vms'][vmIndex]
+        
+        # Iterate over VM's hard drives: remove id for each
+        for n in range(len(vm['hardDrives'])):
+            del vm['hardDrives'][n]['id']
+        
+        # Update app
+        app['design']['vms'][vmIndex] = vm
+        print(c.yellow("\nRepublishing application using fresh disk snapshots . . . "), end='')
+        try:
+            ravClient.update_application(app)
+            ravClient.publish_application_updates(self.appId)
+        except:
+            print(c.red("\n\nProblem updating & republishing app!\n"))
+            raise
+        print(c.green("DONE!"))
+    
+    
+    #~ def ui_command_reset_vm_to_pristine_state(self):
+        #~ """
+        #~ Reset VM to the original design image from the blueprint.
+        #~ """
+        #~ if not self.parent.parent.confirm_app_is_published():
+            #~ return
+        #~ newImage = self.create_new_vm_image(fromBlueprint=True)
+        #~ print(c.yellow("\nReplacing VM with new pristine image . . . "), end='')
+        #~ stdout.flush()
+        #~ try:
+            #~ ravClient.update_image(newImage)
+            #~ ravClient.publish_application_updates(self.appId)
+        #~ except:
+            #~ print(c.red("\n\nProblem updating VM with new image!\n"))
+            #~ raise
+        #~ print(c.green("DONE!"))
+    
+    #~ def ui_command_snapshot_vm(self):
+        #~ if not self.parent.parent.confirm_app_is_published():
+            #~ return
+        #~ newImage = self.create_new_image(fromBlueprint=False)
+        #~ print(c.yellow("\nReplacing VM with new pristine image . . ."), end='')
+        #~ stdout.flush()
+        #~ try:
+            #~ ravClient.update_image(newImage)
+        #~ except:
+            #~ print(c.red("\n\nProblem updating VM with new image!\n"))
+            #~ raise
+        #~ print(c.green("DONE!"))
+#~ 
+        #~ imgName = "{}snapshot-{}/{}".format(appnamePrefix, self.appName, self.vmName)
+        #~ img = {'applicationId': self.appId,
+               #~ 'vmId': self.vmId,
+               #~ 'offline': True,
+               #~ 'imageName': imgName}
+        #~ print(c.yellow("\nShutting down VM and creating snapshot"))
+        #~ try:
+            #~ img = ravClient.createImage(img)
+        #~ except:
+            #~ print(c.red("\nProblem creating snapshot image!\n"))
+            #~ raise
+#~ 
+        
+        
+

@@ -6,6 +6,7 @@
 from __future__ import print_function
 import sys
 from getpass import getpass
+import ConfigParser
 
 # Custom modules
 import rsaw_ascii
@@ -16,10 +17,7 @@ except:
     print("Missing proper version of required python module (rsaw's ravello_sdk)\n"
           "Get it from https://github.com/ryran/python-sdk/tree/experimental\n")
     raise
-from local_config import RavelloLogin 
 
-
-cfgFile = RavelloLogin()
 ravshOpt = c = None
 
 
@@ -38,15 +36,26 @@ def is_admin():
         return False
 
 
+def get_username(prompt="Enter username: ", defaultUser=None):
+    """Prompt for a username, allowing pre-populated *defaultUser*."""
+    user = raw_input(prompt)
+    while not len(user):
+        if defaultUser:
+            user = defaultUser
+        else:
+            user = raw_input("    You must enter a username: ")
+    return user
+
+
 def get_passphrase(prompt="Enter passphrase: ", defaultPass=None):
     """Prompt for a passphrase, allowing pre-populated *defaultPass*."""
-    pwd = getpass(prompt=prompt)
-    while not len(pwd):
+    passwd = getpass(prompt)
+    while not len(passwd):
         if defaultPass:
-            pwd = defaultPass
+            passwd = defaultPass
         else:
-            pwd = getpass(prompt="    You must enter a passphrase: ")
-    return pwd
+            passwd = getpass("    You must enter a passphrase: ")
+    return passwd
 
 
 def login(opt):
@@ -60,17 +69,27 @@ def login(opt):
     
     verbose("\nConnecting to Ravello . . .")
     
+    cfg = ConfigParser.ConfigParser()
+    cfg.read(ravshOpt.userCfgDir + '/ravshello.conf')
+    cUser = cPass = cMesg = None
+    try:
+        cUser = cfg.get('login', 'ravelloUser')
+        cPass = cfg.get('login', 'ravelloPass')
+        cMesg = cfg.get('login', 'unableToLoginAdditionalMsg')
+    except:
+        pass
+    
     # If necessary, get Ravello username from configfile or prompt
     if not ravshOpt.ravelloUser:
-        if cfgFile.ravelloUser:
-            ravshOpt.ravelloUser = cfgFile.ravelloUser
+        if cUser:
+            ravshOpt.ravelloUser = cUser
         else:
-            ravshOpt.ravelloUser = raw_input(c.CYAN("  Enter Ravello username: "))
+            ravshOpt.ravelloUser = get_username(c.CYAN("  Enter Ravello username: "))
     
     # If necessary, get Ravello password from configfile or prompt
     if not ravshOpt.ravelloPass:
-        if cfgFile.ravelloPass:
-            ravshOpt.ravelloPass = cfgFile.ravelloPass
+        if cPass:
+            ravshOpt.ravelloPass = cPass
         else:
             ravshOpt.ravelloPass = get_passphrase(c.CYAN("  Enter Ravello passphrase: "))
     
@@ -80,8 +99,8 @@ def login(opt):
     except:
         print(c.RED("  Logging in to Ravello failed!"))
         print("\nIf you're sure your Ravello credentials are correct, try updating ravshello")
-        if cfgFile.unableToLoginAdditionalMsg:
-            print(cfgFile.unableToLoginAdditionalMsg)
+        if cMesg:
+            print(cMesg)
         sys.exit(5)
     del ravshOpt.ravelloUser, ravshOpt.ravelloPass
     

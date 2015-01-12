@@ -6,13 +6,12 @@
 from __future__ import print_function
 import pwd
 import os
+import ConfigParser
 
 # Custom modules
 import rsaw_ascii
-from local_config import RavshelloUI 
 
 
-cfgFile = RavshelloUI()
 ravshOpt = c = None
 
 
@@ -28,17 +27,23 @@ def authorize_user(opt):
     global ravshOpt, c
     ravshOpt = opt    
     c = rsaw_ascii.AsciiColors(ravshOpt.enableAsciiColors)
+    cfg = ConfigParser.ConfigParser()
+    cfg.read(ravshOpt.userCfgDir + '/ravshello.conf')
+    try:
+        cNick = cfg.get('ui', 'nickname')
+    except:
+        cNick = None
     verbose("\nDetermining nickname . . .")
     verbose("  (Nickname will be prepended to names of any apps you create)")
     verbose("  (Nickname will be used to restrict which app names you can see)")
-    if opt.promptNickname:
+    if ravshOpt.promptNickname:
         nick = raw_input(c.CYAN("  Enter nickname: "))
         user = rsaw_ascii.replace_bad_chars_with_underscores(nick)
         if nick != user:
             print(c.yellow("    Invalid characters replaced w/underscores"))
         print(c.GREEN("  Using entry '{}' for nickname".format(user)))
-    elif cfgFile.nickname:
-        user = cfgFile.nickname
+    elif cNick:
+        user = cNick
         print(c.GREEN("  Using configfile-specified nick '{}' for nickname".format(user)))
     else:
         user = pwd.getpwuid(os.getuid()).pw_name
