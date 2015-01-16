@@ -4,11 +4,6 @@
 
 # Modules from standard library
 from __future__ import print_function
-import json
-import subprocess
-import termios
-import re
-import ConfigParser
 from sys import stdout, stdin
 from pydoc import pager
 from time import sleep, time
@@ -17,6 +12,10 @@ from datetime import datetime, date
 from getpass import getpass
 from calendar import month_name
 from operator import itemgetter
+import json
+import subprocess
+import termios
+import re
 
 # Modules not from standard library, but widely available
 try:
@@ -31,8 +30,8 @@ del ConfigNode.ui_command_pwd
 del ConfigNode.ui_command_bookmarks
 del ConfigNode.ui_complete_bookmarks
 
-# Custom ravshello modules
-import rsaw_ascii
+# Custom modules
+from ravshello import string_ops
 try:
     import ravello_sdk
     ravello_sdk.is_rsaw_sdk()
@@ -41,19 +40,11 @@ except:
           "Get it from https://github.com/ryran/python-sdk/tree/experimental\n")
     raise
 
-
-cfg = ravshOpt = c = user = ravClient = appnamePrefix = sshKeyFile = None
+# Globals
+ravshOpt = c = user = ravClient = appnamePrefix = None
 appCache = {}
 alertCache = {}
 userCache = {}
-
-
-def verbose(message, end=None):
-    if ravshOpt.verboseMessages:
-        if end is not None:
-            print(c.magenta(message), end=end)
-        else:
-            print(c.magenta(message))
 
 
 def is_admin():
@@ -65,58 +56,46 @@ def is_admin():
 
 def get_passphrase(prompt="Enter passphrase: ", defaultPass=None, confirm=False):
     """Prompt for a passphrase, allowing pre-populated *defaultPass*."""
-    pwd1 = getpass(prompt=prompt)
+    pwd1 = getpass(prompt)
     while not len(pwd1):
         if defaultPass:
             return defaultPass
         else:
             print("You must enter a passphrase")
-            pwd1 = getpass(prompt=prompt)
+            pwd1 = getpass(prompt)
     if confirm:
         print("Re-enter pass to confirm")
-        pwd2 = getpass(prompt=prompt)
+        pwd2 = getpass(prompt)
         while not pwd1 == pwd2:
             print("Second passphrase did not match the first!")
-            pwd2 = getpass(prompt=prompt)
+            pwd2 = getpass(prompt)
     return pwd1
 
 
 def main(opt, client):
     # Set some important globals
-    global cfg, ravshOpt, ravClient, user, appnamePrefix, c, sshKeyFile
+    global ravshOpt, ravClient, user, appnamePrefix, c
     ravshOpt = opt
     ravClient = client
     user = ravshOpt.user
     appnamePrefix = 'k:' + user + '__'
-    c = rsaw_ascii.AsciiColors(ravshOpt.enableAsciiColors)
-    cfg = ConfigParser.ConfigParser()
-    cfg.read(ravshOpt.userCfgDir + '/ravshello.conf')
-    try:
-        sshKeyFile = cfg.get('ui', 'sshKeyFile')
-    except:
-        sshKeyFile = None
-    else:
-        if not path.exists(sshKeyFile):
-            sshKeyFile = None
-    
+    c = ravshOpt.c
     # Clear preferences if asked via cmdline arg
     if ravshOpt.clearPreferences:
         remove(path.join(ravshOpt.userCfgDir, 'prefs.bin'))
-    
-    # Read configfile and override user defaults
+    # Read prefs and override user defaults
     shell = cfshell.ConfigShell(ravshOpt.userCfgDir)
     shell.prefs['color_mode'] = True
     shell.prefs['tree_max_depth'] = 1
     shell.prefs['prompt_length'] = 0
     shell.prefs['tree_show_root'] = True
     shell.prefs['tree_status_mode'] = True
-    if not ravshOpt.enableAsciiColors:
+    if not ravshOpt.enableColor:
         shell.prefs['color_mode'] = False
     if not ravshOpt.showAllApps:
         # Turn off max depth restriction for admins in restricted-view mode
         shell.prefs['tree_max_depth'] = 0
-
-    verbose("  Fetching data from Ravello . . . ", end='')
+    c.verbose("  Fetching data from Ravello . . . ", end='')
     stdout.flush()
     # Start configshell
     try:
@@ -126,25 +105,23 @@ def main(opt, client):
         print(c.RED("  UNHANDLED EXCEPTION getting data from Ravello"))
         print("\nIf problem persists, send this message with below traceback to rsaw@redhat.com")
         raise
-    verbose("Done!")
-    
+    c.verbose("Done!")
     print()
-    
     if is_admin() and ravshOpt.cmdlineArgs:
+        # Run args non-interactively
         if ravshOpt.scriptFile:
             print(c.yellow("Ignoring script file because cmdline args present\n"))
         shell.run_cmdline(ravshOpt.cmdlineArgs)
-    
     elif is_admin() and ravshOpt.scriptFile:
+        # Run script file non-interactively
         try:
             shell.run_script(ravshOpt.scriptFile)
         except:
             print(c.red("Unable to open script file\n"))
-    
     elif is_admin():
         shell.run_interactive()
-    
     else:
+        # What to do when not admin 
         if ravshOpt.cmdlineArgs or ravshOpt.scriptFile:
             print(c.red("Sorry! Only admins are allowed to use ravshello non-interactively\n"))
             return
@@ -181,6 +158,7 @@ def monthdelta(date, delta):
         29 if y%4==0 and not y%400==0 else 28,31,30,31,30,31,31,30,31,30,31][m-1])
     return date.replace(day=d,month=m, year=y)
 
+
 def prepare_file_for_writing(filePath, overwrite=True):
     d = path.dirname(filePath)
     if len(d) and not path.exists(d):
@@ -198,12 +176,14 @@ def prepare_file_for_writing(filePath, overwrite=True):
             print("Good choice. That file looks important.\n")
             raise Exception
 
+
 def slow_print(string, interval=.02):
     for char in string:
         sleep(interval)
         print(char, end='')
         stdout.flush()
     print()
+
 
 def sync_file_with_str(outfile, string, perms=0600):
     """Save *string* to *outfile*"""
@@ -213,6 +193,7 @@ def sync_file_with_str(outfile, string, perms=0600):
         chmod(outfile, perms)
     except:
         pass
+
 
 def prompt_for_number(prompt, endRange=None, startRange=0, defaultNumber=None):
     """Prompt for + require a positive natural number or a number in a range."""
@@ -238,9 +219,11 @@ def prompt_for_number(prompt, endRange=None, startRange=0, defaultNumber=None):
             print("Not a valid number! Try again")
     return n
 
+
 def prettify_json(input):
     """Convert dictionary-like json to multiline indented output."""
     return str(json.dumps(input, indent=4))
+
 
 def iterate_json_keys_for_value(jsonObj, key, value):
     """Return True if *jsonObj* contains a key *key* set to value *value*."""
@@ -248,6 +231,7 @@ def iterate_json_keys_for_value(jsonObj, key, value):
         if i[key] == value:
             return True
     return False
+
 
 def get_learner_active_vms(learner):
     """Return the number of active VMs a learner has."""
@@ -260,11 +244,13 @@ def get_learner_active_vms(learner):
                 pass
     return activeVms
 
+
 def check_timestamp_proximity(timeStamp, thresholdMins=1):
     m, s = divmod(time() - timeStamp, 60)
     if m < thresholdMins:
         return True
     return False
+
 
 def update_app_cache(appId=None):
     global appCache
@@ -282,6 +268,7 @@ def update_app_cache(appId=None):
             appCache[appId]['definition'] = a
             appCache[appId]['ts'] = time()
 
+
 def purge_app_cache(appId=None):
     global appCache
     if appId:
@@ -290,12 +277,14 @@ def purge_app_cache(appId=None):
     else:
         appCache = {}
 
+
 def get_app(appId):
     if appId in appCache and check_timestamp_proximity(appCache[appId]['ts'], 1):
         pass
     else:
         update_app_cache(appId)
     return appCache[appId]['definition']
+
 
 def update_user_cache():
     global userCache
@@ -304,9 +293,11 @@ def update_user_cache():
         userCache[u['id']] = u
     userCache['_timestamp'] = time()
 
+
 def purge_user_cache():
     global userCache
     userCache = {}
+
 
 def get_user(userId):
     if userId in userCache and check_timestamp_proximity(userCache['_timestamp'], 1):
@@ -314,6 +305,7 @@ def get_user(userId):
     else:
         update_user_cache()
     return userCache[userId]
+
 
 def update_alert_cache():
     global alertCache
@@ -331,9 +323,11 @@ def update_alert_cache():
                 raise
     alertCache['_timestamp'] = time()
 
+
 def purge_alert_cache():
     global alertCache
     alertCache = {}
+
 
 def get_alerts_for_event(eventName):
     global alertCache
@@ -343,6 +337,7 @@ def get_alerts_for_event(eventName):
         return alertCache[eventName]
     else:
         return None
+
 
 def get_application_details(app):
     """Return VM details for application with ID *app*."""
@@ -397,9 +392,9 @@ def get_application_details(app):
     return vmDetails, appDefinition['deployment']['cloud'], appDefinition['deployment']['regionName'], expirationTime
 
 
-
 class RavelloRoot(ConfigNode):
     """Setup the Ravello root node where anything is possible.
+    
     Path: /
     """
     
@@ -414,18 +409,18 @@ class RavelloRoot(ConfigNode):
             # Images(self)
         Applications(self)
     
-    
     def summary(self):
         if is_admin():
-            status = "Local admin user: {}, Ravello user: {}".format(user, ravClient._username)
+            status = "Local admin user: {}, Ravello user: {}".format(
+                user, ravClient._username)
         else:
             status = "Logged in as user: {}".format(user)
         return (status, None)
 
 
-
 class Events(ConfigNode):
     """Setup the 'events' node.
+    
     Path: /events/
     """
     
@@ -433,13 +428,11 @@ class Events(ConfigNode):
         ConfigNode.__init__(self, 'events', parent)
         self.isPopulated = False
     
-    
     def summary(self):
         if self.isPopulated:
             return ("{} possible events".format(self.numberOfEvents), None)
         else:
             return ("To populate, run command: refresh_events", False)
-        
         
     def refresh(self):
         self._children = set([])
@@ -451,8 +444,7 @@ class Events(ConfigNode):
         self.isPopulated = True
     
     def ui_command_refresh_events(self):
-        """
-        Poll Ravello for list of event names and registered userAlerts.
+        """Poll Ravello for list of event names and registered userAlerts.
         
         Not doing this automatically speeds startup time.
         """
@@ -461,18 +453,15 @@ class Events(ConfigNode):
         self.refresh()
         print(c.green("DONE!\n"))
     
-
     def print_event_names(self):
         pager("JSON list of EVENT NAMES\n" +
               prettify_json(ravClient.get_events()))
     
-    
     def ui_command_print_event_names(self, outputFile='@pager'):
-        """
-        Pretty-print JSON list of Ravello event names in pager or export to file.
+        """Pretty-print JSON list of Ravello event names.
         
         Optionally specify outputFile as a relative or absolute path on the
-        local system.
+        local system; otherwise output will be piped to pager.
         
         Alerts can be registered for any of the returned event names with the
         register_alert command.
@@ -495,15 +484,12 @@ class Events(ConfigNode):
                 return
             print(c.green("Exported event names to file: '{}'\n".format(outputFile)))
     
-    
     def print_registered_alerts(self):
         pager("JSON list of REGISTERED USER ALERTS\n" +
               prettify_json(ravClient.get_alerts()))
     
-    
     def ui_command_print_registered_alerts(self, outputFile='@pager'):
-        """
-        Pretty-print JSON list of userAlerts registered.
+        """Pretty-print JSON list of userAlerts registered.
         
         Assuming the current Ravello user is an admin, they will actually see
         all alerts in the organization.
@@ -532,9 +518,9 @@ class Events(ConfigNode):
             print(c.green("Exported userAlerts to file: '{}'\n".format(outputFile)))
 
 
-
 class Event(ConfigNode):
     """Setup the dynamically-named event node.
+    
     Path: /events/{EVENT_NAME}/
     """
     
@@ -542,7 +528,6 @@ class Event(ConfigNode):
         ConfigNode.__init__(self, eventName, parent)
         self.eventName = eventName.swapcase()
         self.refresh()
-    
     
     def refresh(self):
         self._children = set([])
@@ -555,7 +540,6 @@ class Event(ConfigNode):
                     a['alertId'],
                     a['userId'])
     
-    
     def summary(self):
         eventAlerts = get_alerts_for_event(self.eventName)
         if eventAlerts:
@@ -563,10 +547,8 @@ class Event(ConfigNode):
         else:
             return ("No alerts", False)
     
-    
     def ui_command_register_alert(self, userEmail='@moi'):
-        """
-        Register the currently logged-in Ravello user to receive email on event.
+        """Register currently logged-in Ravello user to receive email on event.
         
         Assuming currently logged in Ravello user is an admin, you can specify
         the user to register via the userEmail option. Note that you cannot
@@ -597,9 +579,9 @@ class Event(ConfigNode):
         self.refresh()
 
 
-
 class UserAlert(ConfigNode):
     """Setup the dynamically-named user alert node.
+    
     Path: /events/{EVENT_NAME}/{USER_IDENTIFIER}/
     """
     
@@ -608,14 +590,11 @@ class UserAlert(ConfigNode):
         self.userId = userId
         self.alertId = alertId
     
-    
     #~ def summary(self):
         #~ return (get_user(self.userId)['email'], None)
     
-    
     def ui_command_unregister_alert(self):
-        """
-        Delete a previously-registered alert.
+        """Delete a previously-registered alert.
         """
         print()
         print(c.yellow("Attempting to unregister alert . . . "), end='')
@@ -630,23 +609,21 @@ class UserAlert(ConfigNode):
         self.parent.remove_child(self)
 
 
-
 class Monitoring(ConfigNode):
     """Setup the 'monitoring' node.
+    
     Path: /monitoring/
     """
     
     def __init__(self, parent):
         ConfigNode.__init__(self, 'monitoring', parent)
     
-    
     def summary(self):
         return ("Ready for queries", None)
     
-    
-    def daily_activity_summary(self, output='@stdout', day=date.today().day, month=date.today().month, year=date.today().year):
-        """
-        Print a report of account activity for the current day.
+    def daily_activity_summary(self, output='@stdout', day=date.today().day,
+            month=date.today().month, year=date.today().year):
+        """Print a report of account activity for the current day.
         
         Optionally specify output as @stdout or @pager or <FilePath>.
         The day, month, and year must all be specified as absolute (positive)
@@ -667,14 +644,13 @@ class Monitoring(ConfigNode):
             print(c.RED("Invalid year specification!\n"))
             return
     
-    
-    def ui_command_search_notifications(self, appId=None, maxResults=500, notificationLevel=None, startTime=None, endTime=None, outputFile='@pager'):
-        """
-        Pretty-print JSON list of notification search results in pager or
-        export to file.
+    def ui_command_search_notifications(self, appId=None, maxResults=500,
+            notificationLevel=None, startTime=None, endTime=None,
+            outputFile='@pager'):
+        """Pretty-print JSON list of notification search results.
         
         Optionally specify outputFile as a relative or absolute path on the
-        local system.
+        local system; otherwise output is piped to pager.
         
         Results will be returned in reverse chronological order with
         newest matches at the top.
@@ -730,19 +706,17 @@ class Monitoring(ConfigNode):
             print(c.green("Exported notification search results to file: '{}'\n".format(outputFile)))
 
 
-
 class Billing(ConfigNode):
     """Setup the 'billing' node.
+    
     Path: /billing/
     """
     
     def __init__(self, parent):
         ConfigNode.__init__(self, 'billing', parent)
     
-    
     def summary(self):
         return ("Ready for queries", None)
-    
     
     def validate_or_prompt_for_month(self, month, year):
         if month == '@prompt':
@@ -769,10 +743,9 @@ class Billing(ConfigNode):
                 raise
         return month, year
     
-    
-    def ui_command_inspect_all_charges(self, outputFile='@pager', month='@prompt', year=date.today().year):
-        """
-        Print full JSON for all charges in a specific month.
+    def ui_command_inspect_all_charges(self, outputFile='@pager',
+            month='@prompt', year=date.today().year):
+        """Print full JSON for all charges in a specific month.
         
         Optionally specify outputFile as a relative or absolute path on the
         local system.
@@ -783,7 +756,6 @@ class Billing(ConfigNode):
         specification to be ignored (-1 is last month, -24 is 2 years ago).
         
         The year can only be specified as an absolute (positive) number.
-        
         """
         print()
         outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
@@ -820,10 +792,8 @@ class Billing(ConfigNode):
             print(c.green("Wrote billing information to file: '{}'".format(outputFile)))
         print()
     
-    
     def ui_command_this_months_summary(self, sortBy='kerb'):
-        """
-        Print billing summary of all charges since beginning of this month.
+        """Print billing summary of all charges since beginning of this month.
         
         With sortBy, charges can be sorted by Ravello acct user ('rav') or
         kerberos user ('kerb').
@@ -843,10 +813,9 @@ class Billing(ConfigNode):
         self.process_billing(b, sortBy)
         print()
     
-    
-    def ui_command_select_month_summary(self, month='@prompt', year=date.today().year, sortBy='kerb'):
-        """
-        Print billing summary of all charges in a specific month.
+    def ui_command_select_month_summary(self, month='@prompt',
+            year=date.today().year, sortBy='kerb'):
+        """Print billing summary of all charges in a specific month.
         
         Setting month to 0 is the same as specifying the number of the current
         month. Specifying a negative number for month will cause year
@@ -877,7 +846,6 @@ class Billing(ConfigNode):
             raise
         self.process_billing(b, sortBy)
         print()
-    
     
     def process_billing(self, monthsCharges, sortBy):
         
@@ -1004,9 +972,9 @@ class Billing(ConfigNode):
               c.REVERSE("${:7.2f}\tMonthly charges grand total".format(prodGrandTotal)))
 
 
-
 class Users(ConfigNode):
     """Setup the 'users' node.
+    
     Path: /users/
     """
     
@@ -1014,13 +982,11 @@ class Users(ConfigNode):
         ConfigNode.__init__(self, 'users', parent)
         self.isPopulated = False
     
-    
     def summary(self):
         if self.isPopulated:
             return ("{} admins, {} users".format(self.numberOfAdmins, self.numberOfUsers - self.numberOfAdmins), None)
         else:
             return ("To populate, run command: refresh_users", False)
-    
     
     def refresh(self):
         self._children = set([])
@@ -1036,10 +1002,8 @@ class Users(ConfigNode):
                     self.numberOfAdmins += 1
         self.isPopulated = True
     
-    
     def ui_command_refresh_users(self):
-        """
-        Poll Ravello for user list.
+        """Poll Ravello for user list.
         
         There are a few situations where this might come in handy:
             - If you create or delete users in the Ravello web UI
@@ -1051,10 +1015,8 @@ class Users(ConfigNode):
         self.refresh()
         print(c.green("DONE!\n"))
     
-    
     def ui_command_invite_new_user(self):
-        """
-        Create new user account via invitation.
+        """Create new user account via invitation.
         
         There apears to be a bug in the Ravello API. This doesn't work.
         """
@@ -1074,16 +1036,15 @@ class Users(ConfigNode):
         User("%s" % user['email'], self, user['id'])
 
 
-
 class User(ConfigNode):
     """Setup the dynamically-named user node.
+    
     Path: /users/{USER_EMAIL}/
     """
     
     def __init__(self, user, parent, userId):
         ConfigNode.__init__(self, user, parent)
         self.userId = userId
-    
     
     def summary(self):
         user = get_user(self.userId)
@@ -1093,10 +1054,8 @@ class User(ConfigNode):
             r = None
         return (user['email'], r)
     
-    
     def ui_command_get_user_info(self):
-        """
-        Pretty-print user details.
+        """Pretty-print user details.
         
         Borrrrrrring.
         """
@@ -1104,24 +1063,17 @@ class User(ConfigNode):
         print(prettify_json(get_user(self.userId)))
         print()
     
-    
     def ui_command_update_user_info(self):
-        """
-        Update user first/last name and admin status.
-        """
-        
+        """Update user first/last name and admin status."""
         user = ravClient.get_user(self.userId)
         print("\nNote that only name and roles can be updated")
         name = raw_input(c.CYAN("\nEnter first name [{}]: ".format(user['name'])))
         if not name:
             name = user['name']
-        
         surname = raw_input(c.CYAN("\nEnter last name [{}]: ".format(user['surname'])))
         if not surname:
             surname = user['surname']
-        
         minusAdmin = addAdmin = False
-        
         if 'ADMIN' in user['roles']:
             response = raw_input(c.CYAN("\nRevoke user's admin access? [y/N] "))
             if response == 'y':
@@ -1134,7 +1086,6 @@ class User(ConfigNode):
             else:
                 user['roles'].append('ADMIN')
                 addAdmin = True
-        
         print()
         # Create request dictionary
         req = {'email': user['email'], 'name': name,  'surname': surname, 'roles': user['roles']}
@@ -1143,19 +1094,16 @@ class User(ConfigNode):
         except:
             print(c.red("Problem updating user!\n"))
             raise
-        
         if minusAdmin:
             self.parent.numberOfAdmins -= 1
         elif addAdmin:
             self.parent.numberOfAdmins += 1
         print(c.green("Updated user info\n"))
     
-    
     def ui_command_delete_user(self):
-        """
-        Delete a user.
+        """Delete a user.
         
-        Hopefully very carefully. No confirm option for this one.
+        Hopefully very carefully. No option to bypass confirmation for this one.
         """
         print()
         slow_print(c.bgRED("  W A R N I N G ! ! ! !"))
@@ -1184,8 +1132,7 @@ class User(ConfigNode):
     
     
     def ui_command_change_user_password(self):
-        """
-        Change a user's password.
+        """Change a user's password.
         
         Doing this requires entering the current password.
         """
@@ -1201,17 +1148,16 @@ class User(ConfigNode):
             raise
         print(c.green("Updated user password\n"))
 
-    
 
 class Blueprints(ConfigNode):
     """Setup the 'blueprints' node.
+    
     Path: /blueprints/
     """
     
     def __init__(self, parent):
         ConfigNode.__init__(self, 'blueprints', parent)
         self.isPopulated = False
-    
     
     def summary(self):
         if self.isPopulated:
@@ -1227,10 +1173,8 @@ class Blueprints(ConfigNode):
             self.numberOfBps += 1
         self.isPopulated = True
     
-    
     def ui_command_refresh_blueprints(self):
-        """
-        Poll Ravello for blueprint list.
+        """Poll Ravello for blueprint list.
         
         There are a few situations where this might come in handy:
             - If you create or delete blueprints in the Ravello web UI
@@ -1242,13 +1186,13 @@ class Blueprints(ConfigNode):
         self.refresh()
         print(c.green("DONE!\n"))
     
-    
     def ui_command_backup_all_bps(self, bpDir='@home'):
-        """
-        Export each & every blueprint to a JSON file.
+        """Export each & every blueprint to a JSON file.
         
-        Default bpDir of @home maps to ~/.ravshello/blueprints. Optionally
-        specify an absolute or relative path.
+        Optionally specify an absolute or relative path; otherwise, default
+        bpDir of @home maps to <CFGDIR>/blueprints. Note also that <CFGDIR>
+        defaults to '~/.ravshello/', but can be tweaked with the cmdline option
+        '--cfgdir'.
         
         File names are determined automatically from the blueprint name (plus an
         extension of ".json"). Existing files are overwritten.
@@ -1279,10 +1223,8 @@ class Blueprints(ConfigNode):
             print(c.green("Exported bp to file: '{}'".format(f)))
         print()
     
-    
     def create_bp_from_json_obj(self, bpDefinition, bpFileName=None):
         """Create a new blueprint from a json blueprint defition."""
-        
         def _delete_temporary_app(appId, appName):
             try:
                 ravClient.delete_application(newApp['id'])
@@ -1343,13 +1285,13 @@ class Blueprints(ConfigNode):
             self.get_child(bpName).print_bp_definition()
         print()
     
-        
     def ui_command_create_bp_from_file(self, inputFile='@prompt'):
-        """
-        Create a blurprint from JSON file in ~/.ravshello/blueprints.
+        """Create a blurprint from JSON file in <CFGDIR>/blueprints.
         
         By specifying inputFile on the command-line, you can use a full path,
-        i.e., choices are not restricted to ~/.ravshello/blueprints.
+        i.e., choices are not restricted to <CFGDIR>/blueprints. Note also that
+        <CFGDIR> defaults to '~/.ravshello/', but can be tweaked with the
+        cmdline option '--cfgdir'.
         
         This command is only useful after running one of the following:
             - backup_all_bps
@@ -1370,17 +1312,14 @@ class Blueprints(ConfigNode):
                 print("(They would need to have been created by the `{}`, `{}`, or `{}` commands)\n"
                       .format(c.BOLD('backup_all_bps'), c.BOLD('backup_bp'), c.BOLD('print_bp_definition')))
                 return
-            
             # Enumerate through list of files
             print(c.BOLD("Blueprint json definitions available in {}:"
                        .format(path.join(ravshOpt.userCfgDir, 'blueprints'))))
             for i, bp in enumerate(bpFileList):
                 print("  {})  {}".format(c.cyan(i), bp))
-            
             # Prompt for bp selection
             selection = prompt_for_number(c.CYAN("\nEnter the number of a file you wish to create a new blueprint from: "), i)
             inputFile = path.join(ravshOpt.userCfgDir, 'blueprints', bpFileList[selection])
-        
         # Load chosen blueprint def file into json obj
         try:
             with open(inputFile) as f:
@@ -1388,14 +1327,13 @@ class Blueprints(ConfigNode):
         except:
             print(c.RED("Problem importing json data from file!\n"))
             raise
-        
         # Make the magic happen
         self.create_bp_from_json_obj(bpDefinition, inputFile)
 
 
-
 class Bp(ConfigNode):
     """Setup the dynamically-named blueprint node.
+    
     Path: /blueprints/{BLUEPRINT_NAME}/
     """
     
@@ -1404,7 +1342,6 @@ class Bp(ConfigNode):
         self.bpId = bpId
         self.bpName = name
         self.creationTime = datetime.fromtimestamp(int(str(creationTime)[:-3]))
-    
     
     def summary(self):
         if self.creationTime.year == datetime.now().year:
@@ -1417,7 +1354,6 @@ class Bp(ConfigNode):
             created = self.creationTime.strftime('%Y/%m/%d')
         return ("Created: {}".format(created), None)
     
-    
     def delete_bp(self):
         try:
             ravClient.delete_blueprint(self.bpId)
@@ -1427,13 +1363,11 @@ class Bp(ConfigNode):
         print(c.green("Deleted blueprint {}\n".format(self.bpName)))
         self.parent.remove_child(self)
     
-    
     def ui_command_delete_bp(self, confirm='true', backupB4del='true'):
-        """
-        Delete a blueprint.
+        """Delete a blueprint.
         
         By default, blueprint will automatically be saved to
-        ~/.ravshello/blueprints/<BlueprintName>.json, overwriting any existing
+        <CFGDIR>/blueprints/<BlueprintName>.json, overwriting any existing
         file. Disable with backupB4del=false.
         
         By default, confirmation will be required to delete the blueprint.
@@ -1456,24 +1390,19 @@ class Bp(ConfigNode):
         else:
             print("Leaving bp intact (probably a good choice)\n")
     
-    
     def ui_command_find_bp_publish_locations(self):
-        """
-        Print details about available publish locations for a blueprint.
+        """Print details about available publish locations for a blueprint.
         """
         print()
         pager("Blueprint available publish locations for '{}'\n".format(self.bpName) + 
               prettify_json(ravClient.get_blueprint_publish_locations(self.bpId)))
     
-    
     def print_bp_definition(self):
         pager("JSON definition for BLUEPRINT '{}'\n".format(self.bpName) + 
               prettify_json(ravClient.get_blueprint(self.bpId)))
     
-    
     def ui_command_print_bp_definition(self, outputFile='@pager'):
-        """
-        Pretty-print blueprint JSON in pager or export to outputFile.
+        """Pretty-print blueprint JSON in pager or export to outputFile.
         
         Optionally specify outputFile as a relative or absolute path on the
         local system.
@@ -1496,10 +1425,8 @@ class Bp(ConfigNode):
                 return
             print(c.green("Exported bp definition to file: '{}'\n".format(outputFile)))
     
-    
     def ui_command_backup_bp(self):
-        """
-        Export blueprint XML and store to a JSON file in ~/.ravshello/blueprints.
+        """Export blueprint XML and store to a JSON file in <CFGDIR>/blueprints.
         
         File names are determined automatically from the blueprint name (plus an
         extension of ".json"). Existing files are overwritten.
@@ -1517,7 +1444,6 @@ class Bp(ConfigNode):
             raise
         print(c.green("Exported bp to file: '{}'\n".format(f)))
     
-    
     def ui_command_make_bp_copy(self):
         """Create a copy of an existing blueprint."""
         # Get current blueprint def
@@ -1526,16 +1452,15 @@ class Bp(ConfigNode):
         self.parent.create_bp_from_json_obj(bpDefinition)
 
 
-
 class Applications(ConfigNode):
     """Setup the 'applications' node.
+    
     Path: /apps/
     """
     
     def __init__(self, parent):
         ConfigNode.__init__(self, 'apps', parent)
         self.refresh()
-    
     
     def refresh(self):
         purge_app_cache()
@@ -1553,18 +1478,15 @@ class Applications(ConfigNode):
                     self.numberOfApps += 1
                     if app['published']: self.numberOfPublishedApps += 1
     
-    
     def summary(self):
         totalActiveVms = get_learner_active_vms(user)
         if not self.numberOfApps:
             return ("No applications", False)
         return ("{} active VMs, {} of {} applications published"
                 .format(totalActiveVms, self.numberOfPublishedApps, self.numberOfApps), None)
-        
-                                   
+    
     def ui_command_refresh_apps(self):
-        """
-        Poll Ravello for application list, the same as on initial startup.
+        """Poll Ravello for application list, the same as on initial startup.
         
         There are a few situations where this might come in handy:
             - If you create or delete apps in the Ravello web UI
@@ -1576,10 +1498,8 @@ class Applications(ConfigNode):
         self.refresh()
         print(c.green("DONE!\n"))
     
-    
     def ui_command__DELETE_ALL_APPS_(self, confirm='true'):
-        """
-        Deletes all user applications.
+        """Deletes all user applications.
         
         Allows deleting all apps associated with your username.
         Use confirm=false with care.
@@ -1615,9 +1535,10 @@ class Applications(ConfigNode):
             print("Whew! That was close! Leaving your apps alone sounds like a good idea")
         print()
     
-    def ui_command_create_app(self, blueprint='@prompt', name='@prompt', desc='@prompt', publish='true', region='@prompt', startAllVms='true'):
-        """
-        Interactively create a new application from a base blueprint.
+    def ui_command_create_app(self, blueprint='@prompt', name='@prompt',
+            desc='@prompt', publish='true', region='@prompt',
+            startAllVms='true'):
+        """Interactively create a new application from a base blueprint.
         
         Optionally specify all parameters on the command-line.
         Note that application name, desc, region can be set to '@auto'.
@@ -1671,18 +1592,19 @@ class Applications(ConfigNode):
         
         if name == '@prompt' or name == '@auto':
             # Set default app name based off blueprint name
-            appName = rsaw_ascii.replace_bad_chars_with_underscores(baseBlueprintName)
+            appName = c.replace_bad_chars_with_underscores(baseBlueprintName)
             
             if is_admin() and name == '@prompt':
                 # Prompt for name if admin
                 a = raw_input(c.CYAN("\nEnter a name for your new application [{}]: ".format(appName)))
                 if len(a):
-                    aFixed = rsaw_ascii.replace_bad_chars_with_underscores(a)
+                    aFixed = c.replace_bad_chars_with_underscores(a)
                     if a != aFixed:
-                        print(c.red("\nNote that configshell (which ravshello uses) won't accept certain chars in paths\n"
-                                    "Namely, only the following are allowed: A-Za-z0-9:_.-\n"
-                                    "In order handle apps with characters BESIDES those, one would have to use the\n"
-                                    "*interactive* cd command with arrow keys"))
+                        print(c.red(
+                            "\nNote that configshell (which ravshello uses) won't accept certain chars in paths\n"
+                            "Namely, only the following are allowed: A-Za-z0-9:_.-\n"
+                            "In order handle apps with characters BESIDES those, one would have to use the\n"
+                            "*interactive* cd command with arrow keys"))
                         response = raw_input(c.CYAN("\nReplace bad characters with underscores? [y/N] "))
                         if response == 'y':
                             appName = aFixed
@@ -1738,9 +1660,9 @@ class Applications(ConfigNode):
             print()
 
 
-
 class App(ConfigNode):
     """Setup the dynamically-named app node.
+    
     Path: /apps/{APP_NAME}/
     """
     
@@ -1749,7 +1671,6 @@ class App(ConfigNode):
         self.appId = appId
         self.appName = name
         Vms(self)
-    
     
     def summary(self):
         app = get_app(self.appId)
@@ -1786,12 +1707,10 @@ class App(ConfigNode):
         else:
             return ("Unpublished draft", None)
     
-    
     def print_message_app_not_published(self):
         print(c.red("Application has not been published yet!\n"))
         print("To publish application, run command:")
         print(c.BOLD("    /apps/{}/ publish_app\n".format(self.appName)))
-    
     
     def confirm_app_is_published(self):
         update_app_cache(self.appId)
@@ -1800,10 +1719,8 @@ class App(ConfigNode):
             return False
         return True
     
-    
     def ui_command_update_app_note(self, note='@prompt'):
-        """
-        Embed an arbitrary string of text in the application description.
+        """Embed an arbitrary string of text in the application description.
         
         Things to keep in mind:
         
@@ -1812,8 +1729,8 @@ class App(ConfigNode):
         - All applications created by ravshello get something like the following
           stored as their initial description:
           
-            [Created with ravshello v1.0.1 by k:rsawhill]
-            
+            [Created w/ravshello v1.0.1 by rsawhill]
+        
         - When using this command, ravshello keeps the above-mentioned string
           intact if it is already present, meaning that notes created by this
           command could be limited to around ~200 bytes
@@ -1823,15 +1740,13 @@ class App(ConfigNode):
         """
         print()
         note = self.ui_eval_param(note, 'string', '@prompt')
-        
         if note == '@prompt':
-            print(c.BOLD("With this command you can store an arbitrarily free-form note about this app"))
+            print(c.BOLD("With this command you can store an arbitrarily free-"
+                         "form note about this app"))
             print("(For example, to keep track of learning module progress)\n")
-        
         app = ravClient.get_application(self.appId)
         currentDescription = app['description']
         m = re.search(r'(\[.*\]) *_{(.*)}_', currentDescription)
-        
         if note == '@prompt':
             if m:
                 print("Current note: '{}'\n".format(m.group(2)))
@@ -1842,19 +1757,16 @@ class App(ConfigNode):
             newNote = " _{" + str(response).strip() + "}_"
         else:
             newNote = " _{" + note.strip() + "}_"
-        
         if m:
             newDescription = m.group(1) + newNote
             allowedNoteLength = 255 - len(m.group(1)) - len(' _{}_')
         else:
             newDescription = currentDescription + newNote
             allowedNoteLength = 255 - len(currentDescription) - len(' _{}_')
-        
         if len(newDescription) > 255:
             print(c.red("Note exceeds allowed length! ({} bytes)\n"
                         .format(allowedNoteLength)))
             return
-        
         app['description'] = newDescription
         print(c.yellow("Saving note to application in the cloud . . . "), end='')
         stdout.flush()
@@ -1865,15 +1777,13 @@ class App(ConfigNode):
             raise
         print(c.green("DONE!\n"))
         purge_app_cache(self.appId)
-        
         if note == '@prompt':
             print("Notes can be seen with the {} command\n"
                   .format(c.BOLD("ls")))
         
-        
-    def ui_command_loop_query_app_status(self, desiredState=None, intervalSec=20, totalMin=30):
-        """
-        Execute query_app_status command on a loop.
+    def ui_command_loop_query_app_status(self, desiredState=None,
+            intervalSec=20, totalMin=30):
+        """Execute query_app_status command on a loop.
         
         Optionally specify desiredState -- loop ends if all VMs reach this state.
         Optionally specify loop interval in seconds.
@@ -1894,15 +1804,16 @@ class App(ConfigNode):
                 totalMin = 1
         self.loop_query_app_status(desiredState, intervalSec, totalMin)
     
-    
     def loop_query_app_status(self, desiredState=None, intervalSec=20, totalMin=30):
         maxLoops = totalMin * 60 / intervalSec
-        print(c.yellow("\nPolling application every {} secs for next {} mins to display VM status . . ."
-              .format(intervalSec, totalMin)))
+        print(c.yellow(
+            "\nPolling application every {} secs for next {} mins to display "
+            "VM status . . .".format(intervalSec, totalMin)))
         if desiredState:
             print("Will stop polling when all VMs reach '{}' state"
                   .format(desiredState))
-        print("(Cancel at any time with " + c.BOLD("Ctrl-c") + ")\n")
+        print("(Cancel status loop early & return to cmdline with " + 
+              c.BOLD("Ctrl-c") + ")\n")
         loopCount = 0
         while loopCount <= maxLoops:
             i = intervalSec
@@ -1914,17 +1825,22 @@ class App(ConfigNode):
                 i -= 1
             print()
             allVmsStarted, allVmsStopped = self.query_app_status()
-            if desiredState == 'STARTED':
-                if allVmsStarted is True: break
-            if desiredState == 'STOPPED':
-                if allVmsStopped is True: break
+            if desiredState == 'STARTED' and allVmsStarted:
+                break
+            if desiredState == 'STOPPED' and allVmsStopped:
+                break
             loopCount += 1
+        
         print(c.green("All VMs reached '{}' state!\n".format(desiredState)))
-    
+        if desiredState == 'STARTED':
+            c.verbose(
+                "SSH NOTE: STARTED does not mean the OS of each machine has "
+                "finished booting\nVNC NOTE: URLs expire within a minute if not "
+                "used; refresh them with either\n          a `query_app_status` "
+                "or `loop_query_app_status` command\n")
     
     def ui_command_query_app_status(self):
-        """
-        Query an app to get full details about all its VMs.
+        """Query an app to get full details about all its VMs.
         
         Once the app has reached STARTED state, the following details might be
         available for display:
@@ -1937,7 +1853,6 @@ class App(ConfigNode):
         print()
         self.query_app_status()
     
-    
     def query_app_status(self):
         vmDetails, cloudProvider, regionName, expireTime = get_application_details(self.appId)
         if not vmDetails:
@@ -1946,9 +1861,9 @@ class App(ConfigNode):
         # Defaults
         allVmsAreStarted = True
         allVmsAreStopped = True
-        key = ''
-        if sshKeyFile:
-            key = ' -i ' + sshKeyFile
+        key = ""
+        if ravshOpt.cfgFile['sshKeyFile']:
+            key = " -i {}".format(ravshOpt.cfgFile['sshKeyFile'])
         if expireTime:
             # Prepare expiration times
             absoluteExpireTime = int(str(expireTime)[:-3])
@@ -2021,7 +1936,6 @@ class App(ConfigNode):
             print()
         return allVmsAreStarted, allVmsAreStopped
     
-    
     def extend_app_autostop(self, minutes=65):
         if not self.confirm_app_is_published():
             return False
@@ -2035,10 +1949,8 @@ class App(ConfigNode):
                       .format(minutes)))
         purge_app_cache(self.appId)
     
-    
     def ui_command_extend_app_autostop(self, minutes=65):
-        """
-        Set the application auto-stop time in minutes.
+        """Set the application auto-stop time in minutes.
         
         Learners can only set auto-stop from 0 up to the default of 65 min.
         Admins can set any value, including '-1' which disables auto-stop timer.
@@ -2054,15 +1966,12 @@ class App(ConfigNode):
         self.extend_app_autostop(minutes)
         print()
     
-    
     def print_app_definition(self):
         pager("JSON definition for APPLICATION '{}'\n".format(self.appName) + 
               prettify_json(ravClient.get_application(self.appId)))
     
-    
     def ui_command_print_app_definition(self, outputFile='@pager'):
-        """
-        Pretty-print app JSON in pager or export to outputFile.
+        """Pretty-print app JSON in pager or export to outputFile.
         
         Optionally specify outputFile as a relative or absolute path on the
         local system.
@@ -2085,7 +1994,6 @@ class App(ConfigNode):
                 return
             print(c.green("Exported app definition to file: '{}'\n".format(outputFile)))
     
-    
     def delete_app(self):
         if get_app(self.appId)['published']:
             published = True
@@ -2102,10 +2010,8 @@ class App(ConfigNode):
         print(c.green("Deleted application {}".format(self.appName)))
         self.parent.remove_child(self)
     
-    
     def ui_command_delete_app(self, confirm='true'):
-        """
-        Delete an application.
+        """Delete an application.
         
         By default, confirmation will be required to delete the application.
         Disable prompt with confirm=false.
@@ -2122,25 +2028,20 @@ class App(ConfigNode):
             print("Leaving app intact (probably a good choice)")
         print()
     
-    
     def ui_command_publish_app(self, region='@prompt', startAllVms='true'):
-        """
-        Interactively publish an application to the cloud.
+        """Interactively publish an application to the cloud.
         
         Optionally specify a region and whether all VMs should be started after
         publishing.
         """
         region = self.ui_eval_param(region, 'string', '@prompt')
         startAllVms = self.ui_eval_param(startAllVms, 'bool', True)
-        
         # Sanity check
         if get_app(self.appId)['published'] is True:
             print(c.red("\nApplication already published!\n"))
             return
-        
         # Set defaults
         selection = preferredCloud = preferredRegion = None
-        
         if not is_admin():
             # Check that we don't have more published apps than we should
             totalActiveVms = get_learner_active_vms(user)
@@ -2156,31 +2057,25 @@ class App(ConfigNode):
                 print("Stop a VM (or a whole application) and then try running command:")
                 print(c.BOLD("    /apps/{}/ start_app\n".format(self.appName)))
                 return
-        
         # Choosing time
         pubLocations = ravClient.get_application_publish_locations(self.appId)
         # Somewhat ironically, we only add cost-optimized option for admins
         if is_admin():
             pubLocations.insert(0, {'regionName': " ", 'cloudName': "auto-select cheapest"})
-        
         if region == '@prompt':
             print(c.BOLD("\nAvailable publish locations:"))
             for i, loc in enumerate(pubLocations):
                 print("  {})  {} {}".format(c.cyan(i), loc['cloudName'], loc['regionName']))
-            
             # Prompt for provider selection
             selection = prompt_for_number(c.CYAN("\nSelect cloud provider/region in which to provision your VMs by entering a number: "), i)
-        
             if 'auto-select cheapest' in pubLocations[selection]['cloudName']:
                 optimizationLevel = 'COST_OPTIMIZED'
             else:
                 optimizationLevel = 'PERFORMANCE_OPTIMIZED'
                 preferredCloud = pubLocations[selection]['cloudName']
                 preferredRegion = pubLocations[selection]['regionName']
-        
         elif region == '@auto':
             optimizationLevel = 'COST_OPTIMIZED'
-        
         else:
             for i, loc in enumerate(pubLocations):
                 if region == loc['regionName']:
@@ -2191,22 +2086,17 @@ class App(ConfigNode):
             else:
                 print(c.RED("Invalid region specified!\n"))
                 return
-        
         # Build request dictionary
         req = {'preferredCloud' : preferredCloud, 'preferredRegion' : preferredRegion,
                'optimizationLevel': optimizationLevel, 'startAllVms': startAllVms}
-        
         # Attempt publish request
         try:
             ravClient.publish_application(self.appId, req)
         except:
             print(c.red("\nProblem creating application!\n"))
             raise
-        
         self.parent.numberOfPublishedApps += 1
-        
         print(c.yellow("\nRavello now publishing your application (Could take 5 to 20 minutes)"))
-        
         # Configure auto-stop (prompt if admin; otherwise set 1hr)
         if startAllVms:
             self.extend_app_autostop()
@@ -2215,10 +2105,8 @@ class App(ConfigNode):
             purge_app_cache(self.appId)
             print()
     
-    
     def ui_command_start_app(self):
-        """
-        Start a stopped application.
+        """Start a stopped application.
         
         Attempts to start all VMs in the application.
         """
@@ -2243,10 +2131,8 @@ class App(ConfigNode):
         purge_app_cache(self.appId)
         self.loop_query_app_status(desiredState='STARTED')
     
-    
     def ui_command_stop_app(self):
-        """
-        Stop a running application.
+        """Stop a running application.
         
         Sends a shutdown (via ACPI) to all VMs in the application.
         """
@@ -2260,10 +2146,8 @@ class App(ConfigNode):
         purge_app_cache(self.appId)
         self.loop_query_app_status(desiredState='STOPPED', intervalSec=15, totalMin=10)
     
-    
     def ui_command_restart_app(self):
-        """
-        Restart a running application.
+        """Restart a running application.
         
         Sends a reboot (via ACPI) to all VMs in the application.
         """
@@ -2278,17 +2162,16 @@ class App(ConfigNode):
         purge_app_cache(self.appId)
         self.loop_query_app_status(desiredState='STARTED')
     
-    
     def generate_images(self):
         """Generate snapshot of all vms in the app. Not ready for primetime."""
         appDetails = get_app(self.appId)
         for i in range(len(appDetails['design']['vms'])):
             print("\n Generating snapshot for vm ",appDetails['design']['vms'][i]['name'])
-            imageName = rsaw_ascii.replace_bad_chars_with_underscores(appDetails['name'])
+            imageName = c.replace_bad_chars_with_underscores(appDetails['name'])
             imageName = appnamePrefix + imageName
             a = raw_input("\nEnter a name for your vm image [{}]: ".format(imageName))
             if a:
-                imageName = rsaw_ascii.replace_bad_chars_with_underscores(a)
+                imageName = c.replace_bad_chars_with_underscores(a)
             applicationId = appDetails['design']['vms'][i]['applicationId']
             vmId = appDetails['design']['vms'][i]['id']
             imageReq = {"applicationId": applicationId, "blueprint": "false", "vmId": vmId, "offline": "true", "imageName": imageName} 
@@ -2301,9 +2184,9 @@ class App(ConfigNode):
         print()
 
 
-
 class Vms(ConfigNode):
     """Setup the dynamically-named vm node.
+    
     Path: /apps/{APP_NAME}/vms/
     """
     
@@ -2324,9 +2207,7 @@ class Vms(ConfigNode):
                 expirationTime = app['deployment']['expirationTime']
             except:
                 expirationTime = None
-                
             status = "{}/{} active".format(totalActiveVms, totalVms)
-            
             if totalActiveVms > 0:
                 hazHappy = True
                 if expirationTime:
@@ -2345,13 +2226,14 @@ class Vms(ConfigNode):
             if totalErrorVms > 0:
                 status += "({} VMs in error state!)".format(totalErrorVms)
                 hazHappy = False
-            
             return (status, hazHappy)
         else:
             return ("", None)
-    
+
+
 class Vm(ConfigNode):
     """Setup the 'vms' node.
+    
     Path: /apps/{APP_NAME}/vms/{VM_NAME}/
     """
     
@@ -2361,7 +2243,6 @@ class Vm(ConfigNode):
         self.appName = parent.appName
         self.vmId = vmId
         self.vmName = name
-    
     
     def summary(self):
         app = get_app(self.appId)
@@ -2379,7 +2260,6 @@ class Vm(ConfigNode):
         else:
             return ("", None)
     
-    
     def confirm_vm_is_state(self, state):
         for vm in ravClient.get_application(self.appId)['deployment']['vms']:
             if vm['id'] == self.vmId:
@@ -2391,22 +2271,18 @@ class Vm(ConfigNode):
         else:
             return False
     
-    
     def print_vm_definition(self):
         """Pretty-print vm JSON in pager."""
         pager("JSON definition for VM '{}' in APPLICATION '{}'\n".format(self.vmName, self.appName) +
               prettify_json(ravClient.get_vm(self.appId, self.vmId)))
-    
     
     def ui_command_print_vm_definition(self):
         """Pretty-print JSON for a VM."""
         print()
         self.print_vm_definition()
     
-    
     def ui_command_start_vm(self):
-        """
-        Start a stopped VM.
+        """Start a stopped VM.
         
         start_vm, stop_vm, & restart_vm all rely on the guest OS correctly
         handling ACPI events. If ACPI is disabled in the kernel (acpi=off) or
@@ -2426,10 +2302,8 @@ class Vm(ConfigNode):
         print(c.yellow("\nVM now starting\n"))
         purge_app_cache(self.appId)
     
-    
     def ui_command_reset_vm_to_last_shutdown_state(self):
-        """
-        Reset VM to the state it was in as of last shutdown.
+        """Reset VM to the state it was in as of last shutdown.
         
         Every VM has its disk state automatically snapshotted at shutdown.
         This command re-publishes the VM using the last snapshot state (which is
@@ -2450,10 +2324,8 @@ class Vm(ConfigNode):
         print("FQDN should stay the same; VNC URL will change; ssh host key might change\n")
         purge_app_cache(self.appId)
     
-    
     def ui_command_stop_vm(self):
-        """
-        Gracefully stop a running VM.
+        """Gracefully stop a running VM.
         
         start_vm, stop_vm, & restart_vm all rely on the guest OS correctly
         handling ACPI events. If ACPI is disabled in the kernel (acpi=off) or
@@ -2472,10 +2344,8 @@ class Vm(ConfigNode):
         print(c.yellow("\nVM now stopping\n"))
         purge_app_cache(self.appId)
     
-    
     def ui_command_poweroff_vm(self):
-        """
-        Cut the power to a VM, hopefully forcing it off immediately.
+        """Cut the power to a VM, hopefully forcing it off immediately.
         
         Sadly, this does not always work.
         In particularl, Ravello has a bug where VMs in 'STOPPING' state don't
@@ -2493,10 +2363,8 @@ class Vm(ConfigNode):
         print(c.yellow("\nVM should be immediately forced off\n"))
         purge_app_cache(self.appId)
     
-    
     def ui_command_restart_vm(self):
-        """
-        Gracefully restart a running VM.
+        """Gracefully restart a running VM.
         
         start_vm, stop_vm, & restart_vm all rely on the guest OS correctly
         handling ACPI events. If ACPI is disabled in the kernel (acpi=off) or

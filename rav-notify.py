@@ -8,15 +8,15 @@ from __future__ import print_function
 from datetime import datetime
 from getpass import getpass
 import argparse
+import yaml
 import json
 import subprocess
 import time
 import sys
-import ConfigParser
 import os
 
-# Custom ravshello modules
-import rsaw_ascii
+# Custom modules
+import string_ops
 try:
     import ravello_sdk
     ravello_sdk.is_rsaw_sdk()
@@ -27,19 +27,7 @@ except:
 
 # Globals
 ravClient = ravshOpt = c = appnamePrefix = None
-eventsOfInterest = [
-    'APP_TIMEOUT_AUTO_STOPPING',
-    'APP_TIMEOUT_AUTO_STOPPED',
-    'APPLICATION_TIMER_RESET',
-    'APPLICATION_DELETED',
-    'VM_STOPPED',
-    'VM_STARTED',
-    ]
-urgency = {
-    'INFO': "low",
-    'WARN': "normal",
-    'ERROR': "critical",
-    }
+
 
 # Helper functions
 
@@ -53,6 +41,7 @@ def get_username(prompt="Enter username: ", defaultUser=None):
             user = raw_input("  You must enter a username: ")
     return user
 
+
 def get_passphrase(prompt="Enter passphrase: ", defaultPass=None):
     """Prompt for a passphrase, allowing pre-populated *defaultPass*."""
     passwd = getpass(prompt)
@@ -63,10 +52,12 @@ def get_passphrase(prompt="Enter passphrase: ", defaultPass=None):
             passwd = getpass("  You must enter a passphrase: ")
     return passwd
 
+
 def debug(*objs):
     """Print *objs* to stderr."""
     if ravshOpt.enableDebug:
         print("DEBUG:", *objs, file=sys.stderr)
+
 
 def update_myAppIds(myAppIds=[]):
     """Refresh global myAppIds list by querying for my applications."""
@@ -76,10 +67,12 @@ def update_myAppIds(myAppIds=[]):
     debug("Watching for events on app ids:", myAppIds)
     return myAppIds
 
+
 def sanitize_timestamp(ts):
     """Insert period into 3rd-from-last place of funky Ravello timestamp."""
     ts = str(ts)
     return float(ts[:-3] + '.' + ts[-3:])
+
 
 def check_timestamp_proximity(timeStamp, thresholdMins=5):
     """Check if UNIX epoch *timeStamp* is less than *thresholdMins* from now."""
@@ -89,6 +82,7 @@ def check_timestamp_proximity(timeStamp, thresholdMins=5):
     if m > -1 and m < thresholdMins:
         return True
     return False
+
 
 def extend_app_autostop(appId, appName, minutes=30):
     """Extend the expiration time of app *appId* by *minutes*."""
@@ -115,6 +109,7 @@ def extend_app_autostop(appId, appName, minutes=30):
             "Application auto-stop timer set for {} minutes from now".format(minutes),
             ]
         subprocess.check_call(cmd)
+
 
 def act_on_imminent_app_expiration(
         runningApps=[], proximityMins=5, extendTimeMins=30):
@@ -185,58 +180,59 @@ def main(argparseOptions):
     
     global c, ravshOpt, appnamePrefix, ravClient
     ravshOpt = argparseOptions
-    c = rsaw_ascii.AsciiColors(ravshOpt.enableAsciiColors)
+    c = string_ops.Printer(ravshOpt.enableColor)
     runningApps = []
     timestamps = []
     
     try:
         with open(os.devnull, 'w') as devnull:
-            subprocess.check_call(
-                ['notify-send', '--version'],
-                stdout=devnull,
-                )
+            subprocess.check_call(['notify-send', '--version'], stdout=devnull)
     except:
         print(c.RED("Unable to launch notify-send command!",
                     "We cannot notify you of events without libnotify installed"))
         sys.exit(2)
     
-    cfg = ConfigParser.ConfigParser()
-    cfg.read(os.path.expanduser('~/.ravshello/ravshello.conf'))
-    cNick = cUser = cPass = cMesg = None
     try:
-        cNick = cfg.get('ui', 'nickname')
-        cUser = cfg.get('login', 'ravelloUser')
-        cPass = cfg.get('login', 'ravelloPass')
-        cMesg = cfg.get('login', 'unableToLoginAdditionalMsg')
+        with open(os.path.expanduser(ravshOpt.configFile)) as f:
+            cfg = yaml.safe_load(f)
     except:
-        pass
+        print(c.yellow(
+            "Note: unable to read configFile '{}'; using defaults"
+            .format(ravshOpt.configFile)))
+        nick = user = passwd = messg = events = None
+    else:
+        nick   = cfg.get('nickname', None)
+        user   = cfg.get('ravelloUser', None)
+        passwd = cfg.get('ravelloPass', None)
+        messg  = cfg.get('unableToLoginAdditionalMsg', None)
+        events = cfg.get('eventsOfInterest', None)
     
     if ravshOpt.kerberos:
         appnamePrefix = 'k:' + ravshOpt.kerberos + '__'
-    elif cNick:
-        appnamePrefix = 'k:' + cNick + '__'
+    elif nick:
+        appnamePrefix = 'k:' + nick + '__'
     else:
         appnamePrefix = ''
     
-    missingCreds = False
+    lackingCreds = False
     
     if not ravshOpt.ravelloUser:
-        if cUser:
-            ravshOpt.ravelloUser = cUser
+        if user:
+            ravshOpt.ravelloUser = user
         elif sys.stdout.isatty():
             ravshOpt.ravelloUser = get_username(c.CYAN("Enter Ravello username: "))
         else:
-            missingCreds = True
+            lackingCreds = True
     
     if not ravshOpt.ravelloPass:
-        if cPass:
-            ravshOpt.ravelloPass = cPass
+        if passwd:
+            ravshOpt.ravelloPass = passwd
         elif sys.stdout.isatty():
             ravshOpt.ravelloPass = get_passphrase(c.CYAN("Enter Ravello passphrase: "))
         else:
-            missingCreds = True
+            lackingCreds = True
     
-    if missingCreds:
+    if lackingCreds:
         cmd = [
             'notify-send', '--urgency', 'critical',
             "rav-notify missing Ravello credentials!",
@@ -255,8 +251,7 @@ def main(argparseOptions):
         if sys.stdout.isatty():
             print(c.RED("Logging in to Ravello failed!"))
             print("\nRe-check your username and password.")
-            if cMesg:
-                print(cMesg)
+            if messg: print(messg)
         else:
             cmd = [
                 'notify-send', '--urgency', 'critical',
@@ -273,6 +268,24 @@ def main(argparseOptions):
         "started or stopped) will trigger further notifications",
         ]
     subprocess.check_call(cmd)
+    
+    if events:
+        eventsOfInterest = events
+    else:
+        eventsOfInterest = [
+            'APP_TIMEOUT_AUTO_STOPPING',
+            'APP_TIMEOUT_AUTO_STOPPED',
+            'APPLICATION_TIMER_RESET',
+            'APPLICATION_DELETED',
+            'VM_STOPPED',
+            'VM_STARTED',
+            ]
+    
+    urgency = {
+        'INFO': "low",
+        'WARN': "normal",
+        'ERROR': "critical",
+        }
     
     # Build a list of app ids we should pay attention to.
     myAppIds = update_myAppIds()
@@ -428,9 +441,12 @@ if __name__ == "__main__":
     p.add_argument('-k', dest='kerberos', metavar='KERBEROS', default='',
         help="Explicitly specify a kerberos username to use for app-filtering " +
              "(Without this, {} will listen for events on all apps)".format(prog))
+    p.add_argument('-f', dest='configFile', metavar='CFGFILE',
+        default='~/.ravshello/config.yaml',
+        help="Explicitly specify path to a yaml config file")
     p.add_argument('-i', dest='refreshInterval', metavar='SECONDS', default=50,
         type=int, help="Tweak default refresh interval (50 sec) to your choosing")
-    p.add_argument('-n', '--nocolor', dest='enableAsciiColors', action='store_false',
+    p.add_argument('-n', '--nocolor', dest='enableColor', action='store_false',
         help="Disable all color terminal enhancements")
     p.add_argument('-d', '--debug', dest='enableDebug', action='store_true',
         help="Enable printing extra details to stdout & stderr")
@@ -443,4 +459,3 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print()
         sys.exit(0)
-

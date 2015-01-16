@@ -7,21 +7,31 @@ from __future__ import print_function
 import re
 
 
-# ConfigShell can only handle certain characters in pathnames
-validChars = ['A-Z', 'a-z', '0-9', ':', '_', '.', '-']
-invalidCharsRegex = '[^A-Za-z0-9:_.-]'
-
-
-def replace_bad_chars_with_underscores(string):
-    """Perform some simple character translation/substitution on *string*."""
-    return re.sub(pattern=invalidCharsRegex, repl='_', string=string)
-
-
-class AsciiColors:
-    """Essentially a container for ascii colorization methods."""
+class Printer(object):
+    """Provide verbose printer method & string colorization methods."""
     
-    def __init__(self, enableAsciiColors=True):
-        self.enableColor = enableAsciiColors
+    def __init__(self, enableColor=True, enableVerboseMessages=True):
+        """Configure if color should be enabled, verbose messages printed.
+        
+        We also store some details for the replace_bad_chars method.
+        """
+        self.enableColor = enableColor
+        self.enableVerbose = enableVerboseMessages
+        # ConfigShell can only handle certain characters in pathnames
+        self.validChars = ["A-Z", "a-z", "0-9", ":", "_", ".", "-"]
+        self.invalidCharsRegex = '[^A-Za-z0-9:_.-]'
+    
+    def replace_bad_chars_with_underscores(string):
+        """Perform some simple character translation/substitution on *string*."""
+        return re.sub(pattern=invalidCharsRegex, repl='_', string=string)
+    
+    def verbose(self, message, end=None):
+        """Print *message* in magenta only if verboseMessages is True."""
+        if self.enableVerbose:
+            if end is not None:
+                print(self.magenta(message), end=end)
+            else:
+                print(self.magenta(message))
     
     def REVERSE(self, txt):
         """Return text in reverse (& bolded)."""
