@@ -19,119 +19,169 @@
 # Modules from standard library
 from __future__ import print_function
 import argparse
+import yaml
 import os
 import sys
 
-# Custom ravshello modules
-import rsaw_ascii, auth_local, auth_ravello, user_interface
-
-# Set version here for now bleh
-ravshelloVersion = "ravshello v1.2.6 last mod 2015/01/07"
+# Custom modules
+import _version, string_ops, auth_local, auth_ravello, user_interface
 
 
-if __name__ == "__main__":
+def main():
+    """Parse cmdline args, configure prefs, login, and start captive UI."""
+    
+    ravshelloVersion = "ravshello v{} last mod {}".format(
+        _version.__version__, _version.__date__)
     
     # Setup parser
     prog = 'ravshello'
-    description = "Interface with Ravello Systems to create & manage apps hosted around the world"
-    epilog = ("Version info: {}\n".format(ravshelloVersion) +
-              "To report bugs/RFEs: github.com/ryran/ravshello/issues or rsaw@redhat.com")
-    
-    p = argparse.ArgumentParser(prog=prog, description=description, 
-                                add_help=False, epilog=epilog,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    description = ("Interface with Ravello Systems to create & manage apps "
+                   "hosted around the world")
+    epilog = ("Version info: {}\n"
+              "To report bugs/RFEs: github.com/ryran/ravshello/issues "
+              "or rsaw@redhat.com").format(ravshelloVersion)
+    p = argparse.ArgumentParser(
+        prog=prog, description=description, add_help=False, epilog=epilog,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     
     # Setup groups for help page:
     grpU = p.add_argument_group('UNIVERSAL OPTIONS')
-    grpA = p.add_argument_group('ADMINISTRATIVE FEATURES',
-                                description="Requires user on Ravello account have admin access")
+    grpA = p.add_argument_group(
+        'ADMINISTRATIVE FEATURES',
+        description="Require that Ravello account user has admin rights")
     
     # Universal opts:
-    grpU.add_argument('-h', '--help',  dest='showHelp', action='store_true',
+    grpU.add_argument(
+        '-h', '--help',  dest='showHelp', action='store_true',
         help="Show this help message and exit")
-    grpU.add_argument('-u',  dest='ravelloUser', metavar='USER', default='',
-        help="Explicitly specify Ravello username (will automatically prompt " +
-             "for a passphrase)")
-    grpU.add_argument('-p', dest='ravelloPass', metavar='PASSWD', default='',
-        help="Explicitly specify a Ravello user password on the command-line " +
-             "(unsafe on multi-user system)")
-    grpU.add_argument('-k', '--nick', dest='promptNickname', action='store_true',
-        help="Prompt for nickname to use for app-filtering (nickname is normally " + 
-             "determined from the system user name)")
-    grpU.add_argument('-n', '--nocolor', dest='enableAsciiColors', action='store_false',
+    grpU.add_argument(
+        '-u',  dest='ravelloUser', metavar='USER', default='',
+        help=("Explicitly specify Ravello username (will automatically prompt "
+              "for a passphrase)"))
+    grpU.add_argument(
+        '-p', dest='ravelloPass', metavar='PASSWD', default='',
+        help=("Explicitly specify a Ravello user password on the command-line "
+              "(unsafe on multi-user system)"))
+    grpU.add_argument(
+        '-k', '--nick', dest='promptNickname', action='store_true',
+        help=("Prompt for nickname to use for app-filtering (nickname is "
+              "normally determined from the system user name)"))
+    grpU.add_argument(
+        '-n', '--nocolor', dest='enableColor', action='store_false',
         help="Disable all color terminal enhancements")
-    grpU.add_argument('--clearprefs', dest='clearPreferences', action='store_true',
-        help="Delete ~/.ravshello/prefs.bin before starting")
-    grpU.add_argument('-q', '--quiet', dest='verboseMessages', action='store_false',
+    grpU.add_argument('--cfgdir', dest='userCfgDir', metavar='CFGDIR',
+        default='~/.ravshello',
+        help=("Explicitly specify path to user config directory "
+              "(default: '~/.ravshello/')"))
+    grpU.add_argument('--cfgfile', dest='cfgFileName', metavar='CFGFILE',
+        default='config.yaml',
+        help=("Explicitly specify basename of optional yaml config file "
+              "containing login credentials, etc (default: 'config.yaml')"))
+    grpU.add_argument(
+        '--clearprefs', dest='clearPreferences', action='store_true',
+        help="Delete prefs.bin in user config directory before starting")
+    grpU.add_argument(
+        '-q', '--quiet', dest='enableVerboseMessages', action='store_false',
         help="Hide verbose messages during startup")
-    grpU.add_argument('-V', '--version', action='version', version=ravshelloVersion)
+    grpU.add_argument(
+        '-V', '--version', action='version', version=ravshelloVersion)
     
     # Admin-only opts:
-    grpA.add_argument('-a', '--admin', dest='enableAdminFuncs', action='store_true',
+    grpA.add_argument(
+        '-a', '--admin', dest='enableAdminFuncs', action='store_true',
         help="Enable admin functionality")
-    grpA.add_argument('-A', '--allapps', dest='showAllApps', action='store_true',
-        help="Show all applications, including ones not associated with your " +
-             "user (automatically triggers --admin option)") 
-    grpA.add_argument('-s', dest='scriptFile', metavar='FILE',
-        help="Specify a script file containing newline-delimited commands " +
-             "(commands will be executed instead of entering the interactive shell)")
-    grpA.add_argument('cmdlineArgs', metavar='COMMAND', nargs=argparse.REMAINDER,
-        help="All remaining non-option arguments will be treated as a single " +
-             "command to execute instead of entering the interactive shell")
+    grpA.add_argument(
+        '-A', '--allapps', dest='showAllApps', action='store_true',
+        help=("Show all applications, including ones not associated with your "
+              "user (automatically triggers --admin option)"))
+    grpA.add_argument(
+        '-s', dest='scriptFile', metavar='FILE',
+        help=("Specify a script file containing newline-delimited commands "
+              "(commands will be executed instead of entering the "
+              "interactive shell)"))
+    grpA.add_argument(
+        'cmdlineArgs', metavar='COMMAND', nargs=argparse.REMAINDER,
+        help=("All remaining non-option arguments will be treated as a single "
+              "command to execute instead of entering the interactive shell"))
     
-    # Parse args out to namespace
-    ravshOpt = p.parse_args()
+    # Build out options namespace
     
-    # Help?
-    if ravshOpt.showHelp:
+    rOpt = p.parse_args()
+    if rOpt.showHelp:
         p.print_help()
         sys.exit()
+    rOpt.cmdlineArgs = " ".join(rOpt.cmdlineArgs)
     
-    # Unpack COMMAND
-    ravshOpt.cmdlineArgs = " ".join(ravshOpt.cmdlineArgs)
+    rOpt.c = c = string_ops.Printer(rOpt.enableColor,
+                                        rOpt.enableVerboseMessages)
     
     # Trigger -a if -A was called
-    if ravshOpt.showAllApps:
-        ravshOpt.enableAdminFuncs = True
-        
-    # Set all other default options
+    if rOpt.showAllApps:
+        rOpt.enableAdminFuncs = True
+     
+    rOpt.ravshelloVersion = ravshelloVersion
     
-    ravshOpt.ravshelloVersion = ravshelloVersion
-        
-    # Set config dir
-    ravshOpt.userCfgDir = os.path.expanduser('~/.ravshello')
+    # Expand userCfgDir in case of tildes; set to default if missing specified dir
+    if os.path.isdir(os.path.expanduser(rOpt.userCfgDir)):
+        rOpt.userCfgDir = os.path.expanduser(rOpt.userCfgDir)
+    else:
+        rOpt.userCfgDir = os.path.expanduser('~/.ravshello')
     
-    # Can create apps in learner mode only from blueprints with one of these in their description
-    ravshOpt.learnerBlueprintTag = ['#is_learner_blueprint', '#learner_bp']
-
-    # Set more stuff for learner enforcement
-    ravshOpt.maxLearnerPublishedApps = 3
-    ravshOpt.maxLearnerActiveVms = 8
+    try:
+        # Read yaml config to dictionary
+        with open(os.path.join(rOpt.userCfgDir, rOpt.cfgFileName)) as f:
+            rOpt.cfgFile = yaml.safe_load(f)
+    except:
+        # Create empty dict if reading config failed
+        c.verbose(
+            "Note: unable to read configFile '{}'; using defaults"
+            .format(os.path.join(rOpt.userCfgDir, rOpt.cfgFileName)))
+        rOpt.cfgFile = {}
     
-    c = rsaw_ascii.AsciiColors(ravshOpt.enableAsciiColors)
+    # Expand sshKeyFile var in case of tildes used; set to none if missing
+    if os.path.isfile(os.path.expanduser(rOpt.cfgFile.get('sshKeyFile', ''))):
+        rOpt.cfgFile['sshKeyFile'] = os.path.expanduser(
+            rOpt.cfgFile['sshKeyFile'])
+    else:
+        rOpt.cfgFile['sshKeyFile'] = None
     
-    # Print welcome
-    print(c.BOLD("Welcome to ravshello, a shell to provision & manage VMs with Ravello!"))
+    # Learner mode can only create apps from blueprints which have
+    # one of these strings in their description
+    rOpt.learnerBlueprintTag = [
+        "#is_learner_blueprint",
+        "#learner_bp",
+        ]
+    
+    # More learner mode rules
+    rOpt.maxLearnerPublishedApps = 3
+    rOpt.maxLearnerActiveVms = 8
+    
+    
+    print(c.BOLD(
+        "Welcome to ravshello, "
+        "a shell to provision & manage machines with Ravello!"))
     
     # Liftoff
-    try:
-        
-        # 1.) Establish a local user name to use in ravshello
-        #     This name is arbitrary and has nothing to do with Ravello login creds
-        #     It is used:
-        #       - To construct names for new apps
-        #       - To restrict which apps can be seen
-        #       - To determine if admin functionality is unlockable (assuming -a or -A)
-        ravshOpt.user = auth_local.authorize_user(ravshOpt)
-        
-        # 2.) Use ravello_sdk.RavelloClient() object to log in to Ravello
-        ravClient = auth_ravello.login(ravshOpt)
-        
-        # 3.) Launch the main configShell user interface
-        #     Pass it the ravshOpt namespace full of all our options
-        #     Also of course pass it the RavelloClient() object
-        user_interface.main(ravshOpt, ravClient)
+    # 1.) Establish a local user name to use in ravshello
+    #     This name is arbitrary and has nothing to do with Ravello login creds
+    #     It is used:
+    #       - To construct names for new apps
+    #       - To restrict which apps can be seen
+    #       - To determine if admin functionality is unlockable (assuming -a or -A)
+    rOpt.user = auth_local.authorize_user(rOpt)
     
+    # 2.) Use ravello_sdk.RavelloClient() object to log in to Ravello
+    rClient = auth_ravello.login(rOpt)
+    
+    # 3.) Launch the main configShell user interface
+    #     Pass it the rOpt namespace full of all our options
+    #     Also of course pass it the RavelloClient() object
+    user_interface.main(rOpt, rClient)
+
+
+if __name__ == '__main__':
+    try:
+        main()
     except KeyboardInterrupt:
         print()
         sys.exit()

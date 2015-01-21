@@ -1,0 +1,33 @@
+## Optionally specify login credentials for Ravello account to avoid prompting
+
+#ravelloUser: me@example.com
+#ravelloPass: my cr@zy passw0rd, no quotes required
+
+
+## If present, *nickname* will be used as the ravshello 'user', overriding the
+## default behavior of determining this from the system user (note that this
+## nickname directive can in turn be overriden by the cmdline --nickname opt)
+
+#nickname: myNickName
+
+
+## Optionally specify additional text to be displayed when login fails
+
+#unableToLoginAdditionalMsg: Ohmg contact bob at the helpdesk!
+
+## If present, *sshKeyFile* is integrated into the ssh command reported to the
+## user by ravshello's query_app_status command
+
+#sshKeyFile: /expected/path/to/ssh/priv/key
+
+
+## If present, *eventsOfInterest* overrides rav-notify's default list of
+## events to watch for. Remove existing lines and/or add new ones.
+
+eventsOfInterest:
+    - APP_TIMEOUT_AUTO_STOPPING
+    - APP_TIMEOUT_AUTO_STOPPED
+    - APPLICATION_TIMER_RESET
+    - APPLICATION_DELETED
+    - VM_STOPPED
+    - VM_STARTED
