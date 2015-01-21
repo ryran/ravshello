@@ -4,11 +4,12 @@
 
 # Modules from standard library
 from __future__ import print_function
-import re
+from time import sleep
+from re import sub
 
 
 class Printer(object):
-    """Provide verbose printer method & string colorization methods."""
+    """Provide some printer methods & string colorization methods."""
     
     def __init__(self, enableColor=True, enableVerboseMessages=True):
         """Configure if color should be enabled, verbose messages printed.
@@ -17,13 +18,19 @@ class Printer(object):
         """
         self.enableColor = enableColor
         self.enableVerbose = enableVerboseMessages
-        # ConfigShell can only handle certain characters in pathnames
-        self.validChars = ["A-Z", "a-z", "0-9", ":", "_", ".", "-"]
-        self.invalidCharsRegex = '[^A-Za-z0-9:_.-]'
     
-    def replace_bad_chars_with_underscores(string):
-        """Perform some simple character translation/substitution on *string*."""
-        return re.sub(pattern=invalidCharsRegex, repl='_', string=string)
+    def slow_print(self, string, interval=.02):
+        """Print input *string* 1 char at a time w/ *interval* secs between."""
+        for char in string:
+            sleep(interval)
+            print(char, end='')
+            stdout.flush()
+        print()
+    
+    def replace_bad_chars_with_underscores(self, string,
+            pattern='[^A-Za-z0-9:_.-]', repl='_', count=0):
+        """Perform some simple character substitution on *string*."""
+        return sub(pattern, repl, string, count)
     
     def verbose(self, message, end=None):
         """Print *message* in magenta only if verboseMessages is True."""

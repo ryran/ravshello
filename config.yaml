@@ -13,10 +13,7 @@
 
 ## Optionally specify additional text to be displayed when login fails
 
-#unableToLoginAdditionalMsg:  >
-    #Put your message here
-    #Multiple lines will be folded together
-
+#unableToLoginAdditionalMsg: Ohmg contact bob at the helpdesk!
 
 ## If present, *sshKeyFile* is integrated into the ssh command reported to the
 ## user by ravshello's query_app_status command

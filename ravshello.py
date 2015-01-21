@@ -106,55 +106,55 @@ def main():
     
     # Build out options namespace
     
-    ravshOpt = p.parse_args()
-    if ravshOpt.showHelp:
+    rOpt = p.parse_args()
+    if rOpt.showHelp:
         p.print_help()
         sys.exit()
-    ravshOpt.cmdlineArgs = " ".join(ravshOpt.cmdlineArgs)
+    rOpt.cmdlineArgs = " ".join(rOpt.cmdlineArgs)
     
-    ravshOpt.c = c = string_ops.Printer(ravshOpt.enableColor,
-                                        ravshOpt.enableVerboseMessages)
+    rOpt.c = c = string_ops.Printer(rOpt.enableColor,
+                                        rOpt.enableVerboseMessages)
     
     # Trigger -a if -A was called
-    if ravshOpt.showAllApps:
-        ravshOpt.enableAdminFuncs = True
+    if rOpt.showAllApps:
+        rOpt.enableAdminFuncs = True
      
-    ravshOpt.ravshelloVersion = ravshelloVersion
+    rOpt.ravshelloVersion = ravshelloVersion
     
     # Expand userCfgDir in case of tildes; set to default if missing specified dir
-    if os.path.isdir(os.path.expanduser(ravshOpt.userCfgDir)):
-        ravshOpt.userCfgDir = os.path.expanduser(ravshOpt.userCfgDir)
+    if os.path.isdir(os.path.expanduser(rOpt.userCfgDir)):
+        rOpt.userCfgDir = os.path.expanduser(rOpt.userCfgDir)
     else:
-        ravshOpt.userCfgDir = os.path.expanduser('~/.ravshello')
+        rOpt.userCfgDir = os.path.expanduser('~/.ravshello')
     
     try:
         # Read yaml config to dictionary
-        with open(os.path.join(ravshOpt.userCfgDir, ravshOpt.cfgFileName)) as f:
-            ravshOpt.cfgFile = yaml.safe_load(f)
+        with open(os.path.join(rOpt.userCfgDir, rOpt.cfgFileName)) as f:
+            rOpt.cfgFile = yaml.safe_load(f)
     except:
         # Create empty dict if reading config failed
         c.verbose(
             "Note: unable to read configFile '{}'; using defaults"
-            .format(os.path.join(ravshOpt.userCfgDir, ravshOpt.cfgFileName)))
-        ravshOpt.cfgFile = {}
+            .format(os.path.join(rOpt.userCfgDir, rOpt.cfgFileName)))
+        rOpt.cfgFile = {}
     
     # Expand sshKeyFile var in case of tildes used; set to none if missing
-    if os.path.isfile(os.path.expanduser(ravshOpt.cfgFile.get('sshKeyFile', ''))):
-        ravshOpt.cfgFile['sshKeyFile'] = os.path.expanduser(
-            ravshOpt.cfgFile['sshKeyFile'])
+    if os.path.isfile(os.path.expanduser(rOpt.cfgFile.get('sshKeyFile', ''))):
+        rOpt.cfgFile['sshKeyFile'] = os.path.expanduser(
+            rOpt.cfgFile['sshKeyFile'])
     else:
-        ravshOpt.cfgFile['sshKeyFile'] = None
+        rOpt.cfgFile['sshKeyFile'] = None
     
     # Learner mode can only create apps from blueprints which have
     # one of these strings in their description
-    ravshOpt.learnerBlueprintTag = [
+    rOpt.learnerBlueprintTag = [
         "#is_learner_blueprint",
         "#learner_bp",
         ]
     
     # More learner mode rules
-    ravshOpt.maxLearnerPublishedApps = 3
-    ravshOpt.maxLearnerActiveVms = 8
+    rOpt.maxLearnerPublishedApps = 3
+    rOpt.maxLearnerActiveVms = 8
     
     
     print(c.BOLD(
@@ -168,15 +168,15 @@ def main():
     #       - To construct names for new apps
     #       - To restrict which apps can be seen
     #       - To determine if admin functionality is unlockable (assuming -a or -A)
-    ravshOpt.user = auth_local.authorize_user(ravshOpt)
+    rOpt.user = auth_local.authorize_user(rOpt)
     
     # 2.) Use ravello_sdk.RavelloClient() object to log in to Ravello
-    ravClient = auth_ravello.login(ravshOpt)
+    rClient = auth_ravello.login(rOpt)
     
     # 3.) Launch the main configShell user interface
-    #     Pass it the ravshOpt namespace full of all our options
+    #     Pass it the rOpt namespace full of all our options
     #     Also of course pass it the RavelloClient() object
-    user_interface.main(ravshOpt, ravClient)
+    user_interface.main(rOpt, rClient)
 
 
 if __name__ == '__main__':

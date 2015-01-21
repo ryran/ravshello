@@ -1,7 +1,7 @@
 ravello_sdk.py*
 *.pyc
 *~
-~.bak*
+*.bak*
 *.egg-info
 .*.swp
 .*.swo

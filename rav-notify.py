@@ -17,6 +17,7 @@ import os
 
 # Custom modules
 import string_ops
+from ui_methods import get_timestamp_proximity, sanitize_timestamp
 try:
     import ravello_sdk
     ravello_sdk.is_rsaw_sdk()
@@ -26,7 +27,7 @@ except:
     raise
 
 # Globals
-ravClient = ravshOpt = c = appnamePrefix = None
+rClient = rOpt = c = appnamePrefix = None
 
 
 # Helper functions
@@ -55,40 +56,24 @@ def get_passphrase(prompt="Enter passphrase: ", defaultPass=None):
 
 def debug(*objs):
     """Print *objs* to stderr."""
-    if ravshOpt.enableDebug:
+    if rOpt.enableDebug:
         print("DEBUG:", *objs, file=sys.stderr)
 
 
 def update_myAppIds(myAppIds=[]):
     """Refresh global myAppIds list by querying for my applications."""
-    for app in ravClient.get_applications(): 
+    for app in rClient.get_applications(): 
         if app['name'].startswith(appnamePrefix) and not app['id'] in myAppIds:
             myAppIds.append(app['id'])
     debug("Watching for events on app ids:", myAppIds)
     return myAppIds
 
 
-def sanitize_timestamp(ts):
-    """Insert period into 3rd-from-last place of funky Ravello timestamp."""
-    ts = str(ts)
-    return float(ts[:-3] + '.' + ts[-3:])
-
-
-def check_timestamp_proximity(timeStamp, thresholdMins=5):
-    """Check if UNIX epoch *timeStamp* is less than *thresholdMins* from now."""
-    if not isinstance(timeStamp, float):
-        timeStamp = sanitize_timestamp(timeStamp)
-    m, s = divmod(timeStamp - time.time(), 60)
-    if m > -1 and m < thresholdMins:
-        return True
-    return False
-
-
 def extend_app_autostop(appId, appName, minutes=30):
     """Extend the expiration time of app *appId* by *minutes*."""
     req = {'expirationFromNowSeconds': minutes * 60}
     try:
-        ravClient.set_application_expiration(appId, req)
+        rClient.set_application_expiration(appId, req)
     except:
         cmd = [
             'zenity',
@@ -111,9 +96,9 @@ def extend_app_autostop(appId, appName, minutes=30):
         subprocess.check_call(cmd)
 
 
-def act_on_imminent_app_expiration(
-        runningApps=[], proximityMins=5, extendTimeMins=30):
-    """Iterate thru *runningApps*, check if any will expire in > *proximityMins*.
+def act_on_imminent_app_expiration(runningApps=[], thresholdSecs=5*60,
+        extendTimeMins=30):
+    """Iterate over *runningApps* to see if any will expire in < *thresholdSecs*.
     
     Expects a list of app dicts as the first param.
     Keys that are checked:
@@ -122,7 +107,9 @@ def act_on_imminent_app_expiration(
         expirationTime
     """
     for app in runningApps:
-        if check_timestamp_proximity(app['expirationTime'], proximityMins):
+        proximity = get_timestamp_proximity(app['expirationTime'])
+        if proximity > 0 and proximity < thresholdSecs:
+            debug("App {} expiration proximity: {}s -- within warning threshold of {}s!".format(app['name'], proximity, thresholdSecs))
             tstamp = datetime.fromtimestamp(
                 app['expirationTime']
                 ).strftime("%H:%M:%S")
@@ -174,13 +161,15 @@ def act_on_imminent_app_expiration(
                             continue
             # Reaching this point means user answered yes to zenity or kdialog.
             extend_app_autostop(app['id'], app['name'], extendTimeMins)
+        else:
+            debug("App {} expiration proximity: {}s -- OK".format(app['name'], proximity))
 
 
 def main(argparseOptions):
     
-    global c, ravshOpt, appnamePrefix, ravClient
-    ravshOpt = argparseOptions
-    c = string_ops.Printer(ravshOpt.enableColor)
+    global c, rOpt, appnamePrefix, rClient
+    rOpt = argparseOptions
+    c = string_ops.Printer(rOpt.enableColor)
     runningApps = []
     timestamps = []
     
@@ -193,12 +182,12 @@ def main(argparseOptions):
         sys.exit(2)
     
     try:
-        with open(os.path.expanduser(ravshOpt.configFile)) as f:
+        with open(os.path.expanduser(rOpt.configFile)) as f:
             cfg = yaml.safe_load(f)
     except:
         print(c.yellow(
             "Note: unable to read configFile '{}'; using defaults"
-            .format(ravshOpt.configFile)))
+            .format(rOpt.configFile)))
         nick = user = passwd = messg = events = None
     else:
         nick   = cfg.get('nickname', None)
@@ -207,8 +196,8 @@ def main(argparseOptions):
         messg  = cfg.get('unableToLoginAdditionalMsg', None)
         events = cfg.get('eventsOfInterest', None)
     
-    if ravshOpt.kerberos:
-        appnamePrefix = 'k:' + ravshOpt.kerberos + '__'
+    if rOpt.kerberos:
+        appnamePrefix = 'k:' + rOpt.kerberos + '__'
     elif nick:
         appnamePrefix = 'k:' + nick + '__'
     else:
@@ -216,19 +205,19 @@ def main(argparseOptions):
     
     lackingCreds = False
     
-    if not ravshOpt.ravelloUser:
+    if not rOpt.ravelloUser:
         if user:
-            ravshOpt.ravelloUser = user
+            rOpt.ravelloUser = user
         elif sys.stdout.isatty():
-            ravshOpt.ravelloUser = get_username(c.CYAN("Enter Ravello username: "))
+            rOpt.ravelloUser = get_username(c.CYAN("Enter Ravello username: "))
         else:
             lackingCreds = True
     
-    if not ravshOpt.ravelloPass:
+    if not rOpt.ravelloPass:
         if passwd:
-            ravshOpt.ravelloPass = passwd
+            rOpt.ravelloPass = passwd
         elif sys.stdout.isatty():
-            ravshOpt.ravelloPass = get_passphrase(c.CYAN("Enter Ravello passphrase: "))
+            rOpt.ravelloPass = get_passphrase(c.CYAN("Enter Ravello passphrase: "))
         else:
             lackingCreds = True
     
@@ -243,10 +232,10 @@ def main(argparseOptions):
         subprocess.check_call(cmd)
         sys.exit(3)
     
-    ravClient = ravello_sdk.RavelloClient()
+    rClient = ravello_sdk.RavelloClient()
     try:
         # Try to log in.
-        ravClient.login(ravshOpt.ravelloUser, ravshOpt.ravelloPass)
+        rClient.login(rOpt.ravelloUser, rOpt.ravelloPass)
     except:
         if sys.stdout.isatty():
             print(c.RED("Logging in to Ravello failed!"))
@@ -281,6 +270,8 @@ def main(argparseOptions):
             'VM_STARTED',
             ]
     
+    debug("Event triggers:\n{}\n".format("\n".join(eventsOfInterest)))
+    
     urgency = {
         'INFO': "low",
         'WARN': "normal",
@@ -291,7 +282,7 @@ def main(argparseOptions):
     myAppIds = update_myAppIds()
     
     for appId in myAppIds:
-        app = ravClient.get_application(appId, aspect='properties')
+        app = rClient.get_application(appId, aspect='properties')
         try:
             # Grab expiration time for all of my deployed apps.
             expirationTime = app['deployment']['expirationTime']
@@ -301,7 +292,7 @@ def main(argparseOptions):
             a = {
                 'id': appId,
                 'name': app['name'].replace(appnamePrefix, ''),
-                'expirationTime': sanitize_timestamp(expirationTime)
+                'expirationTime': sanitize_timestamp(expirationTime),
                 }
             runningApps.append(a)
     
@@ -315,9 +306,9 @@ def main(argparseOptions):
         # Set lower bound to 5 minutes ago, upper bound to right now.
         # Unusual manipulation present because Ravello expects timestamps to
         # include thousandths of a sec, but not as floating-point.
-        start = time.time() - (5*60 + ravshOpt.refreshInterval)
-        start = int("{:.0f}".format(start) + '000')
-        end = int("{:.0f}".format(time.time()) + '000')
+        start = time.time() - (5*60 + rOpt.refreshInterval)
+        start = int("{:.3f}".format(start).replace('.', ''))
+        end = int("{:.3f}".format(time.time()).replace('.', ''))
         query = {
             'dateRange': {
                 'startTime': start,
@@ -326,11 +317,11 @@ def main(argparseOptions):
             }
         try:
             # Perform our search.
-            results = ravClient.search_notifications(query)
+            results = rClient.search_notifications(query)
         except ravello_sdk.RavelloError as e:
             if e.args[0] == 'request timeout':
                 # Timeout, so try one more time.
-                results = ravClient.search_notifications(query)
+                results = rClient.search_notifications(query)
         try:
             # Results are returned in reverse-chronological order.
             for event in reversed(results['notification']):
@@ -351,9 +342,8 @@ def main(argparseOptions):
             if any(etype in event['eventType'] for etype in eventsOfInterest):
                 # Get application data if event of interest.
                 try:
-                    app = ravClient.get_application(
-                        event['appId'], aspect='properties'
-                        )
+                    app = rClient.get_application(
+                        event['appId'], aspect='properties')
                 except KeyError:
                     # Will fail if event is not about an app, i.e.: on user login.
                     continue
@@ -411,8 +401,8 @@ def main(argparseOptions):
                     ]
                 subprocess.check_call(cmd)
         
-        if ravshOpt.enableDebug and sys.stdout.isatty():
-            i = ravshOpt.refreshInterval
+        if rOpt.enableDebug and sys.stdout.isatty():
+            i = rOpt.refreshInterval
             while i >= 0:
                 print(c.REVERSE("{}".format(i)), end='')
                 sys.stdout.flush()
@@ -421,7 +411,7 @@ def main(argparseOptions):
                 i -= 1
             print()
         else:
-            time.sleep(ravshOpt.refreshInterval)
+            time.sleep(rOpt.refreshInterval)
 
         myAppIds = update_myAppIds(myAppIds)
 
@@ -443,7 +433,8 @@ if __name__ == "__main__":
              "(Without this, {} will listen for events on all apps)".format(prog))
     p.add_argument('-f', dest='configFile', metavar='CFGFILE',
         default='~/.ravshello/config.yaml',
-        help="Explicitly specify path to a yaml config file")
+        help="Explicitly specify path to a yaml config file (Defaults to " +
+             "~/.ravshello/config.yaml")
     p.add_argument('-i', dest='refreshInterval', metavar='SECONDS', default=50,
         type=int, help="Tweak default refresh interval (50 sec) to your choosing")
     p.add_argument('-n', '--nocolor', dest='enableColor', action='store_false',
@@ -452,10 +443,10 @@ if __name__ == "__main__":
         help="Enable printing extra details to stdout & stderr")
     
     # Parse args out to namespace
-    ravshOpt = p.parse_args()
+    rOpt = p.parse_args()
     
     try:
-        main(ravshOpt)
+        main(rOpt)
     except KeyboardInterrupt:
         print()
         sys.exit(0)
