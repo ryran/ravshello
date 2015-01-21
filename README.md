@@ -7,6 +7,28 @@ Do you want to use the command-line to manage your account?
 
 **Check this out.**
 
+Haven't set it up to be a proper python package yet, so here's some simple get-started instructions:
+
+```
+git clone https://github.com/ryran/ravshello.git ~/ravshello
+mkdir ~/bin
+ln -sv ~/ravshello/ravshello.py ~/bin/ravshello
+ln -sv ~/ravshello/rav-notify.py ~/bin/rav-notify
+wget -P ~/ravshello https://raw.githubusercontent.com/ryran/python-sdk/experimental/lib/ravello_sdk.py
+ravshello -h
+ravshello
+```
+
+[ OPTIONAL ] After seeing how that works, you can avoid typing user/pass by populating the config file, i.e.:
+
+```
+cp -v ~/ravshello/config.yaml ~/.ravshello/
+vim ~/.ravshello/config.yaml
+```
+
+[ OPTIONAL ] You can also run `rav-notify` to get GUI notifications for your apps.
+
+
 screenshots
 ===========
 
