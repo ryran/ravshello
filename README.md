@@ -2,12 +2,10 @@ ravshello
 =========
 
 Do you have an account with ravellosystems.com?
-
 Do you want to use the command-line to manage your account?
+**If yes, then check this out.**
 
-**Check this out.**
-
-Haven't set it up to be a proper python package yet, so here's some simple get-started instructions:
+Proper python packaging not in place yet, so here's some get-started instructions:
 
 ```
 git clone https://github.com/ryran/ravshello.git ~/ravshello
@@ -18,22 +16,20 @@ wget -P ~/ravshello https://raw.githubusercontent.com/ryran/python-sdk/experimen
 ravshello
 ```
 
-After that, you could optionally populate the config file to avoid typing user/pass all the time:
+After that, you can optionally populate the config file to avoid typing user/pass all the time:
 
 ```
 cp -v ~/ravshello/config.yaml ~/.ravshello/
 vim ~/.ravshello/config.yaml
 ```
 
-You could also optionally run `rav-notify` to get GUI notifications for your apps.
+You can also optionally run `rav-notify` to get GUI notifications for your apps.
 
 
 screenshots
 ===========
 
-Forgive the lack of words. For the moment I'll just let these screenshots speak for themselves.
-
-![help page](http://people.redhat.com/rsawhill/ravshello/stock-ravshello.helppage.png)
+![help page](http://people.redhat.com/rsawhill/ravshello/stock-ravshello.help.png)
 
 ![initial login, create/publish app](http://people.redhat.com/rsawhill/ravshello/stock-ravshello.create_publish.png)
 
