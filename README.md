@@ -15,18 +15,17 @@ mkdir ~/bin
 ln -sv ~/ravshello/ravshello.py ~/bin/ravshello
 ln -sv ~/ravshello/rav-notify.py ~/bin/rav-notify
 wget -P ~/ravshello https://raw.githubusercontent.com/ryran/python-sdk/experimental/lib/ravello_sdk.py
-ravshello -h
 ravshello
 ```
 
-[ OPTIONAL ] After seeing how that works, you can avoid typing user/pass by populating the config file, i.e.:
+After that, you could optionally populate the config file to avoid typing user/pass all the time:
 
 ```
 cp -v ~/ravshello/config.yaml ~/.ravshello/
 vim ~/.ravshello/config.yaml
 ```
 
-[ OPTIONAL ] You can also run `rav-notify` to get GUI notifications for your apps.
+You could also optionally run `rav-notify` to get GUI notifications for your apps.
 
 
 screenshots
