@@ -6,16 +6,14 @@
 from __future__ import print_function
 from time import sleep
 from re import sub
+from sys import stdout
 
 
 class Printer(object):
     """Provide some printer methods & string colorization methods."""
     
     def __init__(self, enableColor=True, enableVerboseMessages=True):
-        """Configure if color should be enabled, verbose messages printed.
-        
-        We also store some details for the replace_bad_chars method.
-        """
+        """Configure if color should be enabled, verbose messages printed."""
         self.enableColor = enableColor
         self.enableVerbose = enableVerboseMessages
     
