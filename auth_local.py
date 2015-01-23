@@ -7,13 +7,13 @@ from __future__ import print_function
 import pwd
 import os
 
-def authorize_user(ravshOpt):
-    c = ravshOpt.c
-    cfgNick = ravshOpt.cfgFile.get('nickname', None)
+def authorize_user(rOpt):
+    c = rOpt.c
+    cfgNick = rOpt.cfgFile.get('nickname', None)
     c.verbose("\nDetermining nickname . . .")
     c.verbose("  (Nickname will be prepended to names of any apps you create)")
     c.verbose("  (Nickname will be used to restrict which app names you can see)")
-    if ravshOpt.promptNickname:
+    if rOpt.promptNickname:
         nick = raw_input(c.CYAN("  Enter nickname: "))
         user = c.replace_bad_chars_with_underscores(nick)
         if nick != user:

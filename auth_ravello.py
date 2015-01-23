@@ -39,31 +39,31 @@ def get_passphrase(prompt="Enter passphrase: ", defaultPass=None):
     return passwd
 
 
-def login(ravshOpt):
+def login(rOpt):
     """Determine Ravello credentials and login via RavelloClient object"""
-    c = ravshOpt.c
+    c = rOpt.c
     # Create client object
-    ravClient = ravello_sdk.RavelloClient()
+    rClient = ravello_sdk.RavelloClient()
     c.verbose("\nConnecting to Ravello . . .")
-    cfgUser = ravshOpt.cfgFile.get('ravelloUser', None)
-    cfgPass = ravshOpt.cfgFile.get('ravelloPass', None)
-    cfgMesg = ravshOpt.cfgFile.get('unableToLoginAdditionalMsg', None)
+    cfgUser = rOpt.cfgFile.get('ravelloUser', None)
+    cfgPass = rOpt.cfgFile.get('ravelloPass', None)
+    cfgMesg = rOpt.cfgFile.get('unableToLoginAdditionalMsg', None)
     # If necessary, get Ravello *username* from configfile or prompt
-    if not ravshOpt.ravelloUser:
+    if not rOpt.ravelloUser:
         if cfgUser:
-            ravshOpt.ravelloUser = cfgUser
+            rOpt.ravelloUser = cfgUser
         else:
-            ravshOpt.ravelloUser = get_username(
+            rOpt.ravelloUser = get_username(
                 c.CYAN("  Enter Ravello username: "))
     # If necessary, get Ravello *password* from configfile or prompt
-    if not ravshOpt.ravelloPass:
+    if not rOpt.ravelloPass:
         if cfgPass:
-            ravshOpt.ravelloPass = cfgPass
+            rOpt.ravelloPass = cfgPass
         else:
-            ravshOpt.ravelloPass = get_passphrase(
+            rOpt.ravelloPass = get_passphrase(
                 c.CYAN("  Enter Ravello passphrase: "))
     try:
-        ravClient.login(ravshOpt.ravelloUser, ravshOpt.ravelloPass)
+        rClient.login(rOpt.ravelloUser, rOpt.ravelloPass)
     except:
         print(c.RED("  Logging in to Ravello failed!"))
         print("\nIf you're sure your Ravello credentials are correct, "
@@ -71,12 +71,12 @@ def login(ravshOpt):
         if cfgMesg: print(cfgMesg)
         sys.exit(5)
     print(c.GREEN("  Logged in to Ravello as "), end='')
-    if ravshOpt.enableAdminFuncs:
+    if rOpt.enableAdminFuncs:
         print(c.YELLOW("ADMIN"), end="")
-        if ravshOpt.showAllApps:
+        if rOpt.showAllApps:
             print(" " + c.bgRED("[global app visiblity]"))
         else:
             print()
     else:
         print(c.GREEN("LEARNER"))
-    return ravClient
+    return rClient
