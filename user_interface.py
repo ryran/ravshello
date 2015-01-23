@@ -21,8 +21,8 @@ try:
     from configshell import shell as cfshell, ConfigNode
 except:
     print("Missing a required python module (configshell)\n"
-          "On RHEL/Fedora, install it with command:\n"
-          "                        yum install python-configshell\n")
+          "On RHEL/Fedora, install with: yum install python-configshell\n"
+          "On Debian, install with: apt-get install python-configshell\n")
     raise
 # Remove configshell commands that we don't need or want
 del ConfigNode.ui_command_pwd

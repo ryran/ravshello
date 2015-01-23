@@ -268,6 +268,8 @@ def main(argparseOptions):
             'APPLICATION_DELETED',
             'VM_STOPPED',
             'VM_STARTED',
+            'VM_SNAPSHOTTING_AFTER_STOP',
+            'VM_FINISHED_SNAPSHOTTING',
             ]
     
     debug("Event triggers:\n{}\n".format("\n".join(eventsOfInterest)))
