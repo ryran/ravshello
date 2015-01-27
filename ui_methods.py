@@ -67,7 +67,7 @@ def save_str_to_file(outfile, string, perms=0600):
 
 
 def prompt_for_number(prompt, endRange=None, startRange=0, defaultNumber=None):
-    """Prompt for + require a positive natural number or a number in a range."""
+    """Prompt for & require a positive natural number or a number in a range."""
     while 1:
         try:
             if defaultNumber is None:
@@ -78,12 +78,15 @@ def prompt_for_number(prompt, endRange=None, startRange=0, defaultNumber=None):
                     n = int(n)
                 else:
                     n = int(defaultNumber)
-            if endRange > 0:
-                r = range(startRange, endRange + 1)
-                if n in r:
+            if endRange is None:
+                if n > 0:
                     break
             else:
-                if n > 0:
+                if startRange < endRange or startRange == endRange:
+                    r = range(startRange, endRange + 1)
+                else:
+                    r = range(endRange, startRange + 1)
+                if n in r:
                     break
             raise ValueError
         except ValueError:
