@@ -9,6 +9,8 @@ Proper python packaging not in place yet, so here's some get-started instruction
 
 ```
 git clone https://github.com/ryran/ravshello.git ~/ravshello
+git clone https://github.com/ryran/configshell-fb.git ~/configshell-fb
+ln -sv ~/configshell-fb/configshell_fb ~/ravshello/configshell_fb
 mkdir ~/bin
 ln -sv ~/ravshello/ravshello.py ~/bin/ravshello
 ln -sv ~/ravshello/rav-notify.py ~/bin/rav-notify
