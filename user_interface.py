@@ -18,11 +18,11 @@ import re
 
 # Modules not from standard library, but widely available
 try:
-    from configshell import shell as cfshell, ConfigNode
+    from configshell_fb import shell as cfshell, ConfigNode, is_rsaw_cfshell
 except:
-    print("Missing a required python module (configshell)\n"
-          "On RHEL/Fedora, install with: yum install python-configshell\n"
-          "On Debian, install with: apt-get install python-configshell\n")
+    print("Missing proper version of required python module (rsaw's configshell_fb)\n"
+          "Get it from: https://github.com/ryran/configshell-fb.git\n"
+          "(Do system install or symlink into ravshello-working-dir/configshell_fb)\n")
     raise
 # Remove configshell commands that we don't need or want
 del ConfigNode.ui_command_pwd
@@ -37,7 +37,8 @@ try:
     ravello_sdk.is_rsaw_sdk()
 except:
     print("Missing proper version of required python module (rsaw's ravello_sdk)\n"
-          "Get it from https://github.com/ryran/python-sdk/tree/experimental\n")
+          "Get it from:\n"
+          "https://github.com/ryran/python-sdk/blob/experimental/lib/ravello_sdk.py\n")
     raise
 
 # Globals
@@ -109,7 +110,7 @@ def main(opt, client):
         except:
             print(c.red("Unable to open script file\n"))
     elif is_admin():
-        shell.run_interactive()
+        shell.run_interactive(exit_on_error=False)
     else:
         # What to do when not admin 
         if rOpt.cmdlineArgs or rOpt.scriptFile:
@@ -137,7 +138,7 @@ def main(opt, client):
         print(" │   - Optional: `{}` into new app directory and press TAB-TAB to see commands".format(c.BOLD('cd')))
         print(" │   - Optional: use `{}` command to add an hour to the timer".format(c.BOLD('extend_app_autostop')))
         print(" └──────────────────────────────────────────────────────────────────────────────\n")
-        shell.run_interactive()
+        shell.run_interactive(exit_on_error=False)
 
 
 class RavelloRoot(ConfigNode):
