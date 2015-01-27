@@ -1360,9 +1360,8 @@ class Applications(ConfigNode):
                             "*interactive* cd command with arrow keys"))
                         response = raw_input(c.CYAN("\nReplace bad characters with underscores? [y/N] "))
                         if response == 'y':
-                            appName = aFixed
-                        else:
-                            appName = a
+                            a = aFixed
+                    appName = a
         else:
             appName = name
             
