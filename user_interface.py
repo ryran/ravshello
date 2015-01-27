@@ -1072,7 +1072,8 @@ class Blueprints(ConfigNode):
                 print("  {})  {}".format(c.cyan(i), bp))
             # Prompt for bp selection
             selection = ui.prompt_for_number(
-                c.CYAN("\nEnter the number of a file you wish to create a new blueprint from: "), i)
+                c.CYAN("\nEnter the number of a file you wish to create a new blueprint from: "),
+                endRange=i)
             inputFile = path.join(rOpt.userCfgDir, 'blueprints', bpFileList[selection])
         # Load chosen blueprint def file into json obj
         try:
@@ -1314,7 +1315,7 @@ class Applications(ConfigNode):
                 description = bp['description']
             except:
                 description = ''
-            if is_admin() or any(tag in description for tag in rOpt.learnerBlueprintTag) or '#k:' + user in description:
+            if is_admin() or any(tag in description for tag in rOpt.learnerBlueprintTag) or '#k:{}'.format(user) in description:
                 allowedBlueprints.append(bp['name'])
         if not allowedBlueprints:
             print(c.red("\nThere are no blueprints available for you to base an application on!\n"
@@ -1329,7 +1330,7 @@ class Applications(ConfigNode):
             
             # Prompt for blueprint selection
             selection = ui.prompt_for_number(
-                c.CYAN("\nEnter number of blueprint: "), i)
+                c.CYAN("\nEnter number of blueprint: "), endRange=i)
             baseBlueprintName = allowedBlueprints[selection]
         else:
             baseBlueprintName = blueprint
@@ -1825,7 +1826,8 @@ class App(ConfigNode):
                 print("  {})  {} {}".format(c.cyan(i), loc['cloudName'], loc['regionName']))
             # Prompt for provider selection
             selection = ui.prompt_for_number(
-                c.CYAN("\nSelect cloud provider/region in which to provision your VMs by entering a number: "),i)
+                c.CYAN("\nSelect cloud provider/region in which to provision your VMs by entering a number: "),
+                endRange=i)
             if 'auto-select cheapest' in pubLocations[selection]['cloudName']:
                 optimizationLevel = 'COST_OPTIMIZED'
             else:
