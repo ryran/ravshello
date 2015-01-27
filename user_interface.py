@@ -857,9 +857,10 @@ class User(ConfigNode):
         Hopefully very carefully. No option to bypass confirmation for this one.
         """
         print()
+        userEmail = rCache.get_user(self.userId)['email']
         c.slow_print(c.bgRED("  W A R N I N G ! ! ! !"))
         c.slow_print(c.RED("\nPress Ctrl-c now unless you are ABSOLUTELY SURE you want to delete {}'s account!"
-                         .format(self.userEmail)))
+                         .format(userEmail)))
         c.slow_print(c.RED("ARE YOU POSITIVELY CONFIDENT THAT ALL THIS USER'S APPS & VMS SHOULD BE DESTROYED?"))
         response = raw_input(c.CYAN("\nType 'yes!' in ALL CAPS to continue: "))
         print()
@@ -876,7 +877,7 @@ class User(ConfigNode):
             self.parent.numberOfUsers -= 1
             if admin:
                 self.parent.numberOfAdmins -= 1
-            print(c.green("Deleted user {}\n".format(self.userEmail)))
+            print(c.green("Deleted user {}\n".format(userEmail)))
             self.parent.remove_child(self)
         else:
             print("Leaving user intact (probably a good choice)\n")
@@ -887,8 +888,9 @@ class User(ConfigNode):
         
         Doing this requires entering the current password.
         """
+        userEmail = rCache.get_user(self.userId)['email']
         req = {}
-        req['existingPassword'] = ui.get_passphrase(c.CYAN("\nEnter {}'s current password: ".format(self.userEmail)))
+        req['existingPassword'] = ui.get_passphrase(c.CYAN("\nEnter {}'s current password: ".format(userEmail)))
         print()
         req['newPassword'] = ui.get_passphrase(c.CYAN("Enter new password: "), confirm=True)
         print()
