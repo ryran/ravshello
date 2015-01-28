@@ -110,7 +110,7 @@ def main(opt, client):
         except:
             print(c.red("Unable to open script file\n"))
     elif is_admin():
-        shell.run_interactive(exit_on_error=False)
+        shell.run_interactive(exit_on_error=rOpt.enableDebugging)
     else:
         # What to do when not admin 
         if rOpt.cmdlineArgs or rOpt.scriptFile:
@@ -138,7 +138,7 @@ def main(opt, client):
         print(" │   - Optional: `{}` into new app directory and press TAB-TAB to see commands".format(c.BOLD('cd')))
         print(" │   - Optional: use `{}` command to add an hour to the timer".format(c.BOLD('extend_app_autostop')))
         print(" └──────────────────────────────────────────────────────────────────────────────\n")
-        shell.run_interactive(exit_on_error=False)
+        shell.run_interactive(exit_on_error=rOpt.enableDebugging)
 
 
 class RavelloRoot(ConfigNode):

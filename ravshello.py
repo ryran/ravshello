@@ -84,6 +84,9 @@ def main():
         '-q', '--quiet', dest='enableVerboseMessages', action='store_false',
         help="Hide verbose messages during startup")
     grpU.add_argument(
+        '-d', '--debug', dest='enableDebugging', action='store_true',
+        help="Turn on debugging features to help troubleshoot a problem")
+    grpU.add_argument(
         '-V', '--version', action='version', version=ravshelloVersion)
     
     # Admin-only opts:
