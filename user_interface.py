@@ -70,7 +70,7 @@ def main(opt, client):
     rOpt = opt
     rClient = client
     user = rOpt.user
-    appnamePrefix = 'k:' + user + '__'
+    appnamePrefix = 'k:{}__'.format(user)
     c = rOpt.c
     rCache = ui.RavelloCache(rClient)
     # Clear preferences if asked via cmdline arg
@@ -595,72 +595,67 @@ class Billing(ConfigNode):
         print()
     
     def process_billing(self, monthsCharges, sortBy):
-        
+        """Crunch the numbers on *monthsCharges*, a list containing dicts."""
         appsByUser = {}
         chargesByProduct = {}
-        
         for app in monthsCharges:
-            
             try:
                 appName = app['appName']
             except:
-                appName = 'UNDEFINED'
-            
+                appName = "UNDEFINED"
             if sortBy in 'rav':
                 try:
                     user = app['owner']['email']
                 except:
-                    user = 'ORG (not associated with specific apps)'
+                    user = "ORG (not associated with specific apps)"
             else:
                 if appName.startswith('k:'):
                     user, appName = appName.split('__', 1)
                     user = user.split(':')[1]
                 else:
-                    user = 'APPS THAT DON\'T FOLLOW KERBEROS NAMING SCHEME'
-            
+                    user = "APPS THAT DON'T FOLLOW KERBEROS NAMING SCHEME"
             if user not in appsByUser:
                 appsByUser[user] = []
-            
             totalCharges = 0
-            
-            for prod in app['charges']:
-                
+            hours = 0
+            for product in app['charges']:
                 try:
-                    totalCharges += prod['summaryPrice']
+                    m = re.search('hour', product['unitName'], re.IGNORECASE)
+                    if m:
+                        hours += product['productCount']
                 except:
                     pass
-                
-                prodName = prod['productName'].replace('Performance Opt', 'Perf-Opt').replace('Cost Opt', 'Cost-Opt')
-                
+                try:
+                    totalCharges += product['summaryPrice']
+                except:
+                    pass
+                prodName = product['productName'].replace('Performance Opt', 'Perf-Opt').replace('Cost Opt', 'Cost-Opt')
                 if prodName not in chargesByProduct:
                     chargesByProduct[prodName] = {
                         'summaryPrice': 0,
-                        'productRate': prod['productRate'],
-                        'unitName': prod['unitName']}
-                
-                chargesByProduct[prodName]['summaryPrice'] += prod['summaryPrice']
-            
+                        'productRate': product['productRate'],
+                        'unitName': product['unitName'],
+                        }
+                chargesByProduct[prodName]['summaryPrice'] += product['summaryPrice']
             try:
                 creationTime = int(str(app['creationTime'])[:-3])
             except:
                 creationTime = 0
-            
-            appsByUser[user].append({'appName': appName,
-                                     'totalCharges': totalCharges,
-                                     'creationTime': creationTime})
+            appsByUser[user].append({
+                'appName': appName,
+                'appHours': hours,
+                'totalCharges': totalCharges,
+                'creationTime': creationTime,
+                })
         
         acctGrandTotal = 0
-        
         for user in appsByUser:
-            
+            userTotalHours = 0
             userGrandTotal = 0
-            
             print(c.BLUE("{}:".format(user)))
-            print(c.magenta("    Charges\tCreation Time\tApplication Name"))
-            
-            for a in sorted(appsByUser[user], key=itemgetter('creationTime')):
-                
-                tc = a['totalCharges']
+            print(c.magenta("    Charges\tHours\tCreation Time\tApplication Name"))
+            for app in sorted(appsByUser[user], key=itemgetter('creationTime')):
+                tc = app['totalCharges']
                 userGrandTotal += tc
                 if tc < 5:
                     tc = c.green("${:7.2f}".format(tc))
@@ -672,30 +667,30 @@ class Billing(ConfigNode):
                     tc = c.red("${:7.2f}".format(tc))
                 else:
                     tc = c.RED("${:7.2f}".format(tc))
-                
-                if not a['creationTime']:
-                    creationTime = 'UNDEFINED'
+                if not app['creationTime']:
+                    creationTime = "N/A\t"
                 else:
-                    creationTime = datetime.fromtimestamp(a['creationTime']).strftime('%m/%d @ %H:%M')
-                
-                print("    {}\t{}\t{}"
-                      .format(tc, creationTime, a['appName']))
-            
+                    creationTime = datetime.fromtimestamp(
+                        app['creationTime']).strftime('%m/%d @ %H:%M')
+                userTotalHours += app['appHours']
+                if not app['appHours']:
+                    hours = "N/A"
+                else:
+                    hours = "{:g}".format(app['appHours'])
+                print("    {}\t{}\t{}\t{}"
+                      .format(tc, hours, creationTime, app['appName']))
             acctGrandTotal += userGrandTotal
-            
-            if not a['totalCharges'] == userGrandTotal:
-                print("    --------")
-                print("    " + c.REVERSE("${:7.2f}".format(userGrandTotal)))
+            if not app['totalCharges'] == userGrandTotal:
+                print("    -----------------")
+                print("    " +
+                      c.REVERSE("${:7.2f}\t{:g}".format(userGrandTotal, userTotalHours)))
             print()
-            
-        prodGrandTotal = 0
         
+        prodGrandTotal = 0
         print(c.BLUE("\nCharges by product:"))
         print(c.magenta("    Charges\tUnit Price\tCount\tProduct Name"))
-        
-        for prod in sorted(chargesByProduct):
-            
-            tc = chargesByProduct[prod]['summaryPrice']
+        for product in sorted(chargesByProduct):
+            tc = chargesByProduct[product]['summaryPrice']
             prodGrandTotal += tc
             if tc < 15:
                 tc = c.green("${:7.2f}".format(tc))
@@ -707,14 +702,12 @@ class Billing(ConfigNode):
                 tc = c.red("${:7.2f}".format(tc))
             else:
                 tc = c.RED("${:7.2f}".format(tc))
-            
             print("    {}\t".format(tc) +
                   "${:.2f} {}\t"
-                  .format(chargesByProduct[prod]['productRate'],
-                          chargesByProduct[prod]['unitName'].replace('Hour', 'Hr').replace('Month', 'Mo')) +
-                  "{:5.1f}\t".format(chargesByProduct[prod]['summaryPrice'] / chargesByProduct[prod]['productRate']) +
-                  "{}".format(prod))
-        
+                  .format(chargesByProduct[product]['productRate'],
+                          chargesByProduct[product]['unitName'].replace('Hour', 'Hr')) +
+                  "{:5.1f}\t".format(chargesByProduct[product]['summaryPrice'] / chargesByProduct[product]['productRate']) +
+                  "{}".format(product))
         print("    --------\n    "  + 
               c.REVERSE("${:7.2f}\tMonthly charges grand total".format(prodGrandTotal)))
 
@@ -1453,11 +1446,11 @@ class App(ConfigNode):
                 currentDescription = app['description']
                 m = re.search('_{(.*)}_', currentDescription)
                 if m:
-                    note = '; ' + m.group(1)
+                    note = "; {}".format(m.group(1))
                 else:
-                    note = ''
+                    note = ""
             except:
-                note = ''
+                note = ""
             return ("{} in {} {}{}".format(appState, cloud, region, note), hazHappy)
         else:
             return ("Unpublished draft", None)
@@ -2014,13 +2007,13 @@ class Vm(ConfigNode):
                 if int(vm['id']) == self.vmId:
                     if vm['state'] in happyStates:
                         hazHappy = True
-                    elif vm['state'] in 'STOPPED':
+                    elif vm['state'] == 'STOPPED':
                         hazHappy = None
                     else:
                         hazHappy = False
                     return (vm['state'], hazHappy)
         else:
-            return ("", None)
+            return (None, None)
     
     def confirm_vm_is_state(self, state):
         for vm in rClient.get_application(self.appId)['deployment']['vms']:
@@ -2036,7 +2029,7 @@ class Vm(ConfigNode):
     def print_vm_definition(self):
         """Pretty-print vm JSON in pager."""
         pager("JSON definition for VM '{}' in APPLICATION '{}'\n".format(self.vmName, self.appName) +
-              ui.prettify_json(rClient.get_vm(self.appId, self.vmId)))
+              ui.prettify_json(rClient.get_vm(self.appId, self.vmId, aspect='deployment')))
     
     def ui_command_print_vm_definition(self):
         """Pretty-print JSON for a VM."""
