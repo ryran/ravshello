@@ -2011,7 +2011,7 @@ class Vm(ConfigNode):
         if app['published']:
             happyStates = ['STARTED', 'STARTING', 'RESTARTING', 'PUBLISHING' ]
             for vm in app['deployment']['vms']:
-                if vm['id'] == self.vmId:
+                if int(vm['id']) == self.vmId:
                     if vm['state'] in happyStates:
                         hazHappy = True
                     elif vm['state'] in 'STOPPED':
