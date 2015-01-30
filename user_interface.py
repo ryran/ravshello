@@ -193,7 +193,8 @@ class Events(ConfigNode):
         self.isPopulated = True
     
     def ui_command_refresh_events(self):
-        """Poll Ravello for list of event names and registered userAlerts.
+        """
+        Poll Ravello for list of event names and registered userAlerts.
         
         Not doing this automatically speeds startup time.
         """
@@ -207,7 +208,8 @@ class Events(ConfigNode):
               ui.prettify_json(rClient.get_events()))
     
     def ui_command_print_event_names(self, outputFile='@pager'):
-        """Pretty-print JSON list of Ravello event names.
+        """
+        Pretty-print JSON list of Ravello event names.
         
         Optionally specify outputFile as a relative or absolute path on the
         local system; otherwise output will be piped to pager.
@@ -238,7 +240,8 @@ class Events(ConfigNode):
               ui.prettify_json(rClient.get_alerts()))
     
     def ui_command_print_registered_alerts(self, outputFile='@pager'):
-        """Pretty-print JSON list of userAlerts registered.
+        """
+        Pretty-print JSON list of userAlerts registered.
         
         Assuming the current Ravello user is an admin, they will actually see
         all alerts in the organization.
@@ -295,7 +298,8 @@ class Event(ConfigNode):
             return ("No alerts", False)
     
     def ui_command_register_alert(self, userEmail='@moi'):
-        """Register currently logged-in Ravello user to receive email on event.
+        """
+        Register currently logged-in Ravello user to receive email on event.
         
         Assuming currently logged in Ravello user is an admin, you can specify
         the user to register via the userEmail option. Note that you cannot
@@ -341,7 +345,8 @@ class UserAlert(ConfigNode):
         #~ return (get_user(self.userId)['email'], None)
     
     def ui_command_unregister_alert(self):
-        """Delete a previously-registered alert.
+        """
+        Delete a previously-registered alert.
         """
         print()
         print(c.yellow("Attempting to unregister alert . . . "), end='')
@@ -394,7 +399,8 @@ class Monitoring(ConfigNode):
     def ui_command_search_notifications(self, appId=None, maxResults=500,
             notificationLevel=None, startTime=None, endTime=None,
             outputFile='@pager'):
-        """Pretty-print JSON list of notification search results.
+        """
+        Pretty-print JSON list of notification search results.
         
         Optionally specify outputFile as a relative or absolute path on the
         local system; otherwise output is piped to pager.
@@ -492,7 +498,8 @@ class Billing(ConfigNode):
     
     def ui_command_inspect_all_charges(self, outputFile='@pager',
             month='@prompt', year=date.today().year):
-        """Print full JSON for all charges in a specific month.
+        """
+        Print full JSON for all charges in a specific month.
         
         Optionally specify *outputFile* as a relative or absolute path on the
         local system.
@@ -540,8 +547,9 @@ class Billing(ConfigNode):
         print()
     
     def ui_command_export_month_to_csv(self, outputFile='@term',
-            month='@prompt', year=date.today().year, sortBy='kerb'):
-        """Export per-app details of a particular month in CSV format.
+            month='@prompt', year=date.today().year, sortBy='nick'):
+        """
+        Export per-app details of a particular month in CSV format.
         
         Optionally specify *month* to avoid being prompted.
         Setting *month* to 0 is the same as specifying the number of the
@@ -553,8 +561,8 @@ class Billing(ConfigNode):
         Optionally specify *outputFile* as @pager or as a relative / absolute
         path on the local system.
         
-        With *sortBy*, charges can be sorted by Ravello acct user ('rav') or
-        kerberos user ('kerb').
+        With *sortBy*, charges can be sorted by Ravello user login ('user') or
+        ravshello nickname ('nick').
         """
         
         print()
@@ -565,9 +573,9 @@ class Billing(ConfigNode):
             month, year = self.validate_or_prompt_for_month(month, year)
         except:
             return
-        sortBy = self.ui_eval_param(sortBy, 'string', 'kerb')
-        if not sortBy in 'rav' and not sortBy in 'kerb':
-            print(c.RED("Specify sortBy as 'rav' or 'kerb'\n"))
+        sortBy = self.ui_eval_param(sortBy, 'string', 'nick')
+        if not sortBy == 'user' and not sortBy == 'nick':
+            print(c.RED("Specify sortBy as 'user' or 'nick'\n"))
             return
         print(c.yellow("Pulling summary of charges for {}-{} . . .\n"
                        .format(year, month_name[month])))
@@ -597,30 +605,55 @@ class Billing(ConfigNode):
         print()
     
     
-    def ui_command_this_months_summary(self, sortBy='kerb'):
-        """Print billing summary of all charges since beginning of this month.
+    def ui_command_this_months_summary(self, outputFile='@pager', sortBy='nick'):
+        """
+        Print billing summary of all charges since beginning of this month.
         
-        With *sortBy*, charges can be sorted by Ravello acct user ('rav') or
-        kerberos user ('kerb').
+        Optionally specify *outputFile* as @term or as a relative / absolute
+        path on the local system.
+        
+        With *sortBy*, charges can be sorted by Ravello user login ('user') or
+        ravshello nickname ('nick').
         """
         print()
-        sortBy = self.ui_eval_param(sortBy, 'string', 'kerb')
-        if not sortBy in 'rav' and not sortBy in 'kerb':
-            print(c.RED("Specify sortBy as 'rav' or 'kerb'\n"))
+        outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
+        sortBy = self.ui_eval_param(sortBy, 'string', 'nick')
+        if not sortBy == 'user' and not sortBy == 'nick':
+            print(c.RED("Specify sortBy as 'user' or 'nick'\n"))
             return
+        print("Warning: data could be up to 1 hour old")
         print(c.yellow("Pulling summary of charges since the start of this month . . .\n"))
         try:
             b = rClient.get_billing()
         except:
             print(c.red("Problem getting billing info!\n"))
             raise
-        print("Note: data could be up to 1 hour old\n")
-        self.print_billing(b, sortBy)
-        print()
+        txt = self.gen_txt_summary(b, sortBy)
+        if outputFile == '@term':
+            print(txt)
+        elif outputFile == '@pager':
+            pipepager(txt, cmd='less -R')
+        else:
+            try:
+                ui.prepare_file_for_writing(outputFile)
+            except:
+                return
+            try:
+                with open(outputFile, 'w') as f:
+                    f.write(txt)
+            except IOError as e:
+                print(c.RED("Problem writing billing information!\n"
+                            "  {}\n".format(e)))
+                return
+            print(c.green("Wrote billing information to file: '{}'\n".format(outputFile)))
     
-    def ui_command_select_month_summary(self, month='@prompt',
-            year=date.today().year, sortBy='kerb'):
-        """Print billing summary of all charges in a specific month.
+    def ui_command_select_month_summary(self, outputFile='@pager',
+            month='@prompt', year=date.today().year, sortBy='nick'):
+        """
+        Print billing summary of all charges in a specific month.
+        
+        Optionally specify *outputFile* as @term or as a relative / absolute
+        path on the local system.
         
         Setting *month* to 0 is the same as specifying the number of the current
         month. Specifying a negative number for *month* will cause *year*
@@ -628,15 +661,16 @@ class Billing(ConfigNode):
         
         The *year* can only be specified as an absolute (positive) number.
         
-        With *sortBy*, charges can be sorted by Ravello acct user ('rav') or
-        kerberos user ('kerb'), with the latter being the default.
+        With *sortBy*, charges can be sorted by Ravello user login ('user') or
+        ravshello nickname ('nick').
         """
         print()
+        outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
         month = self.ui_eval_param(month, 'string', '@prompt')
         year = self.ui_eval_param(year, 'number', date.today().year)
-        sortBy = self.ui_eval_param(sortBy, 'string', 'kerb')
-        if not sortBy in 'rav' and not sortBy in 'kerb':
-            print(c.RED("Specify sortBy as 'rav' or 'kerb'\n"))
+        sortBy = self.ui_eval_param(sortBy, 'string', 'nick')
+        if not sortBy == 'user' and not sortBy == 'nick':
+            print(c.RED("Specify sortBy as 'user' or 'nick'\n"))
             return
         try:
             month, year = self.validate_or_prompt_for_month(month, year)
@@ -649,13 +683,29 @@ class Billing(ConfigNode):
         except:
             print(c.red("Problem getting billing info!\n"))
             raise
-        self.print_billing(b, sortBy)
-        print()
+        txt = self.gen_txt_summary(b, sortBy)
+        if outputFile == '@term':
+            print(txt)
+        elif outputFile == '@pager':
+            pipepager(txt, cmd='less -R')
+        else:
+            try:
+                ui.prepare_file_for_writing(outputFile)
+            except:
+                return
+            try:
+                with open(outputFile, 'w') as f:
+                    f.write(txt)
+            except IOError as e:
+                print(c.RED("Problem writing billing information!\n"
+                            "  {}\n".format(e)))
+                return
+            print(c.green("Wrote billing information to file: '{}'\n".format(outputFile)))
     
     def _process_billing_input(self, monthsCharges, sortBy):
         """Crunch the numbers on list returned by RavelloClient.get_billing()
         
-        Return 2 dictionaries which can be used by print_billing() or gen_csv().
+        Return 2 dictionaries which can be used by gen_txt_summary() or gen_csv().
         """
         appsByUser = {}
         chargesByProduct = {}
@@ -664,17 +714,17 @@ class Billing(ConfigNode):
                 appName = app['appName']
             except:
                 appName = "UNDEFINED"
-            if sortBy in 'rav':
-                try:
-                    user = app['owner']['email']
-                except:
-                    user = "ORG (not associated with specific apps)"
-            else:
+            if sortBy == 'nick':
                 if appName.startswith('k:'):
                     user, appName = appName.split('__', 1)
                     user = user.split(':')[1]
                 else:
-                    user = "APPS THAT DON'T FOLLOW KERBEROS NAMING SCHEME"
+                    user = "APPS THAT DON'T FOLLOW NICKNAME NAMING SCHEME"
+            else:
+                try:
+                    user = app['owner']['email']
+                except:
+                    user = "ORG (not associated with specific apps)"
             if user not in appsByUser:
                 appsByUser[user] = []
             totalCharges = 0
@@ -722,28 +772,29 @@ class Billing(ConfigNode):
                     user, app['appName'], app['appHours'], app['totalCharges']))
         return "\n".join(out)
     
-    def print_billing(self, monthsCharges, sortBy):
-        """Print billing goodness to screen in pretty colors."""
+    def gen_txt_summary(self, monthsCharges, sortBy):
+        """Generate billing goodness with pretty colors."""
+        out = []
         appsByUser, chargesByProduct = self._process_billing_input(monthsCharges, sortBy)
         acctGrandTotal = 0
         for user in appsByUser:
             userTotalHours = 0
             userGrandTotal = 0
-            print(c.BLUE("{}:".format(user)))
-            print(c.magenta("    Charges\tHours\tCreation Time\tApplication Name"))
+            out.append(c.BLUE("{}:".format(user)))
+            out.append(c.magenta("    Charges\tHours\tCreation Time\tApplication Name"))
             for app in sorted(appsByUser[user], key=itemgetter('creationTime')):
                 tc = app['totalCharges']
                 userGrandTotal += tc
                 if tc < 5:
-                    tc = c.green("${:7.2f}".format(tc))
+                    tc = c.green("${:8.2f}".format(tc))
                 elif tc < 15:
-                    tc = c.yellow("${:7.2f}".format(tc))
+                    tc = c.yellow("${:8.2f}".format(tc))
                 elif tc < 25:
-                    tc = c.YELLOW("${:7.2f}".format(tc))
+                    tc = c.YELLOW("${:8.2f}".format(tc))
                 elif tc < 35:
-                    tc = c.red("${:7.2f}".format(tc))
+                    tc = c.red("${:8.2f}".format(tc))
                 else:
-                    tc = c.RED("${:7.2f}".format(tc))
+                    tc = c.RED("${:8.2f}".format(tc))
                 if not app['creationTime']:
                     creationTime = "N/A\t"
                 else:
@@ -754,38 +805,46 @@ class Billing(ConfigNode):
                     hours = "N/A"
                 else:
                     hours = "{:g}".format(app['appHours'])
-                print("    {}\t{}\t{}\t{}"
-                      .format(tc, hours, creationTime, app['appName']))
+                out.append("    {}\t{}\t{}\t{}"
+                           .format(tc, hours, creationTime, app['appName']))
             acctGrandTotal += userGrandTotal
             if not app['totalCharges'] == userGrandTotal:
-                print("    -----------------")
-                print("    " +
-                      c.REVERSE("${:7.2f}\t{:g}".format(userGrandTotal, userTotalHours)))
-            print()
+                out.append("    -----------------")
+                out.append("    " +
+                           c.REVERSE("${:8.2f}\t{:g}"
+                                     .format(userGrandTotal, userTotalHours)))
+            out.append("")
         prodGrandTotal = 0
-        print(c.BLUE("\nCharges by product:"))
-        print(c.magenta("    Charges\tUnit Price\tCount\tProduct Name"))
+        out.append("")
+        out.append(c.BLUE("Charges by product:"))
+        out.append(c.magenta("    Charges\tUnit Price\tCount\tProduct Name"))
         for product in sorted(chargesByProduct):
             tc = chargesByProduct[product]['summaryPrice']
             prodGrandTotal += tc
             if tc < 15:
-                tc = c.green("${:7.2f}".format(tc))
+                tc = c.green("${:8.2f}".format(tc))
             elif tc < 50:
-                tc = c.yellow("${:7.2f}".format(tc))
+                tc = c.yellow("${:8.2f}".format(tc))
             elif tc < 90:
-                tc = c.YELLOW("${:7.2f}".format(tc))
+                tc = c.YELLOW("${:8.2f}".format(tc))
             elif tc < 130:
-                tc = c.red("${:7.2f}".format(tc))
+                tc = c.red("${:8.2f}".format(tc))
             else:
-                tc = c.RED("${:7.2f}".format(tc))
-            print("    {}\t".format(tc) +
-                  "${:.2f} {}\t"
-                  .format(chargesByProduct[product]['productRate'],
-                          chargesByProduct[product]['unitName'].replace('Hour', 'Hr')) +
-                  "{:5.1f}\t".format(chargesByProduct[product]['summaryPrice'] / chargesByProduct[product]['productRate']) +
-                  "{}".format(product))
-        print("    --------\n    "  + 
-              c.REVERSE("${:7.2f}\tMonthly charges grand total".format(prodGrandTotal)))
+                tc = c.RED("${:8.2f}".format(tc))
+            out.append(
+                "    {}\t${:.2f} {}\t{:5.1f}\t{}"
+                .format(
+                    tc,
+                    chargesByProduct[product]['productRate'],
+                    chargesByProduct[product]['unitName'].replace('Hour', 'Hr'),
+                    chargesByProduct[product]['summaryPrice'] / chargesByProduct[product]['productRate'],
+                    product))
+        out.append("    --------")
+        out.append(
+            "    "  + 
+            c.REVERSE("${:8.2f}\tMonthly charges grand total".format(prodGrandTotal)))
+        out.append("")
+        return "\n".join(out)
 
 
 class Users(ConfigNode):
@@ -818,7 +877,8 @@ class Users(ConfigNode):
         self.isPopulated = True
     
     def ui_command_refresh_users(self):
-        """Poll Ravello for user list.
+        """
+        Poll Ravello for user list.
         
         There are a few situations where this might come in handy:
             - If you create or delete users in the Ravello web UI
@@ -831,7 +891,8 @@ class Users(ConfigNode):
         print(c.green("DONE!\n"))
     
     def ui_command_invite_new_user(self):
-        """Create new user account via invitation.
+        """
+        Create new user account via invitation.
         
         There apears to be a bug in the Ravello API. This doesn't work.
         """
@@ -870,16 +931,17 @@ class User(ConfigNode):
         return (user['email'], r)
     
     def ui_command_get_user_info(self):
-        """Pretty-print user details.
-        
-        Borrrrrrring.
+        """
+        Pretty-print user details.
         """
         print()
         print(ui.prettify_json(rCache.get_user(self.userId)))
         print()
     
     def ui_command_update_user_info(self):
-        """Update user first/last name and admin status."""
+        """
+        Update user first/last name and admin status.
+        """
         user = rClient.get_user(self.userId)
         print("\nNote that only name and roles can be updated")
         name = raw_input(c.CYAN("\nEnter first name [{}]: ".format(user['name'])))
@@ -921,7 +983,8 @@ class User(ConfigNode):
         print(c.green("Updated user info\n"))
     
     def ui_command_delete_user(self):
-        """Delete a user.
+        """
+        Delete a user.
         
         Hopefully very carefully. No option to bypass confirmation for this one.
         """
@@ -953,7 +1016,8 @@ class User(ConfigNode):
     
     
     def ui_command_change_user_password(self):
-        """Change a user's password.
+        """
+        Change a user's password.
         
         Doing this requires entering the current password.
         """
@@ -996,7 +1060,8 @@ class Blueprints(ConfigNode):
         self.isPopulated = True
     
     def ui_command_refresh_blueprints(self):
-        """Poll Ravello for blueprint list.
+        """
+        Poll Ravello for blueprint list.
         
         There are a few situations where this might come in handy:
             - If you create or delete blueprints in the Ravello web UI
@@ -1009,7 +1074,8 @@ class Blueprints(ConfigNode):
         print(c.green("DONE!\n"))
     
     def ui_command_backup_all_bps(self, bpDir='@home'):
-        """Export each & every blueprint to a JSON file.
+        """
+        Export each & every blueprint to a JSON file.
         
         Optionally specify an absolute or relative path; otherwise, default
         bpDir of @home maps to <CFGDIR>/blueprints. Note also that <CFGDIR>
@@ -1108,7 +1174,8 @@ class Blueprints(ConfigNode):
         print()
     
     def ui_command_create_bp_from_file(self, inputFile='@prompt'):
-        """Create a blurprint from JSON file in <CFGDIR>/blueprints.
+        """
+        Create a blurprint from JSON file in <CFGDIR>/blueprints.
         
         By specifying inputFile on the command-line, you can use a full path,
         i.e., choices are not restricted to <CFGDIR>/blueprints. Note also that
@@ -1188,7 +1255,8 @@ class Bp(ConfigNode):
         self.parent.remove_child(self)
     
     def ui_command_delete_bp(self, confirm='true', backupB4del='true'):
-        """Delete a blueprint.
+        """
+        Delete a blueprint.
         
         By default, blueprint will automatically be saved to
         <CFGDIR>/blueprints/<BlueprintName>.json, overwriting any existing
@@ -1215,7 +1283,8 @@ class Bp(ConfigNode):
             print("Leaving bp intact (probably a good choice)\n")
     
     def ui_command_find_bp_publish_locations(self):
-        """Print details about available publish locations for a blueprint.
+        """
+        Print details about available publish locations for a blueprint.
         """
         print()
         pager("Blueprint available publish locations for '{}'\n".format(self.bpName) + 
@@ -1226,9 +1295,10 @@ class Bp(ConfigNode):
               ui.prettify_json(rClient.get_blueprint(self.bpId)))
     
     def ui_command_print_bp_definition(self, outputFile='@pager'):
-        """Pretty-print blueprint JSON in pager or export to outputFile.
+        """
+        Pretty-print blueprint JSON in pager or export to outputFile.
         
-        Optionally specify outputFile as a relative or absolute path on the
+        Optionally specify *outputFile* as a relative or absolute path on the
         local system.
         """
         print()
@@ -1250,7 +1320,8 @@ class Bp(ConfigNode):
             print(c.green("Exported bp definition to file: '{}'\n".format(outputFile)))
     
     def ui_command_backup_bp(self):
-        """Export blueprint XML and store to a JSON file in <CFGDIR>/blueprints.
+        """
+        Export blueprint XML and store to a JSON file in <CFGDIR>/blueprints.
         
         File names are determined automatically from the blueprint name (plus an
         extension of ".json"). Existing files are overwritten.
@@ -1269,7 +1340,9 @@ class Bp(ConfigNode):
         print(c.green("Exported bp to file: '{}'\n".format(f)))
     
     def ui_command_make_bp_copy(self):
-        """Create a copy of an existing blueprint."""
+        """
+        Create a copy of an existing blueprint.
+        """
         # Get current blueprint def
         bpDefinition = rClient.get_blueprint(self.bpId)
         # Make the magic happen
@@ -1310,7 +1383,8 @@ class Applications(ConfigNode):
                 .format(totalActiveVms, self.numberOfPublishedApps, self.numberOfApps), None)
     
     def ui_command_refresh_apps(self):
-        """Poll Ravello for application list, the same as on initial startup.
+        """
+        Poll Ravello for application list, the same as on initial startup.
         
         There are a few situations where this might come in handy:
             - If you create or delete apps in the Ravello web UI
@@ -1323,7 +1397,8 @@ class Applications(ConfigNode):
         print(c.green("DONE!\n"))
     
     def ui_command__DELETE_ALL_APPS_(self, confirm='true'):
-        """Deletes all user applications.
+        """
+        Deletes all user applications.
         
         Allows deleting all apps associated with your username.
         Use confirm=false with care.
@@ -1362,7 +1437,8 @@ class Applications(ConfigNode):
     def ui_command_create_app(self, blueprint='@prompt', name='@prompt',
             desc='@prompt', publish='true', region='@prompt',
             startAllVms='true'):
-        """Interactively create a new application from a base blueprint.
+        """
+        Interactively create a new application from a base blueprint.
         
         Optionally specify all parameters on the command-line.
         Note that application name, desc, region can be set to '@auto'.
@@ -1544,7 +1620,8 @@ class App(ConfigNode):
         return True
     
     def ui_command_update_app_note(self, note='@prompt'):
-        """Embed an arbitrary string of text in the application description.
+        """
+        Embed an arbitrary string of text in the application description.
         
         Things to keep in mind:
         
@@ -1607,7 +1684,8 @@ class App(ConfigNode):
         
     def ui_command_loop_query_app_status(self, desiredState=None,
             intervalSec=20, totalMin=30):
-        """Execute query_app_status command on a loop.
+        """
+        Execute query_app_status command on a loop.
         
         Optionally specify desiredState -- loop ends if all VMs reach this state.
         Optionally specify loop interval in seconds.
@@ -1664,7 +1742,8 @@ class App(ConfigNode):
                 "or `loop_query_app_status` command\n")
     
     def ui_command_query_app_status(self):
-        """Query an app to get full details about all its VMs.
+        """
+        Query an app to get full details about all its VMs.
         
         Once the app has reached STARTED state, the following details might be
         available for display:
@@ -1777,7 +1856,8 @@ class App(ConfigNode):
         rCache.purge_app_cache(self.appId)
     
     def ui_command_extend_app_autostop(self, minutes=65):
-        """Set the application auto-stop time in minutes.
+        """
+        Set the application auto-stop time in minutes.
         
         Learners can only set auto-stop from 0 up to the default of 65 min.
         Admins can set any value, including '-1' which disables auto-stop timer.
@@ -1798,7 +1878,8 @@ class App(ConfigNode):
               ui.prettify_json(rClient.get_application(self.appId)))
     
     def ui_command_print_app_definition(self, outputFile='@pager'):
-        """Pretty-print app JSON in pager or export to outputFile.
+        """
+        Pretty-print app JSON in pager or export to outputFile.
         
         Optionally specify outputFile as a relative or absolute path on the
         local system.
@@ -1838,7 +1919,8 @@ class App(ConfigNode):
         self.parent.remove_child(self)
     
     def ui_command_delete_app(self, confirm='true'):
-        """Delete an application.
+        """
+        Delete an application.
         
         By default, confirmation will be required to delete the application.
         Disable prompt with confirm=false.
@@ -1856,7 +1938,8 @@ class App(ConfigNode):
         print()
     
     def ui_command_publish_app(self, region='@prompt', startAllVms='true'):
-        """Interactively publish an application to the cloud.
+        """
+        Interactively publish an application to the cloud.
         
         Optionally specify a region and whether all VMs should be started after
         publishing.
@@ -1935,7 +2018,8 @@ class App(ConfigNode):
             print()
     
     def ui_command_start_app(self):
-        """Start a stopped application.
+        """
+        Start a stopped application.
         
         Attempts to start all VMs in the application.
         """
@@ -1961,7 +2045,8 @@ class App(ConfigNode):
         self.loop_query_app_status(desiredState='STARTED')
     
     def ui_command_stop_app(self):
-        """Stop a running application.
+        """
+        Stop a running application.
         
         Sends a shutdown (via ACPI) to all VMs in the application.
         """
@@ -1976,7 +2061,8 @@ class App(ConfigNode):
         self.loop_query_app_status(desiredState='STOPPED', intervalSec=15, totalMin=10)
     
     def ui_command_restart_app(self):
-        """Restart a running application.
+        """
+        Restart a running application.
         
         Sends a reboot (via ACPI) to all VMs in the application.
         """
@@ -2108,12 +2194,15 @@ class Vm(ConfigNode):
               ui.prettify_json(rClient.get_vm(self.appId, self.vmId, aspect='deployment')))
     
     def ui_command_print_vm_definition(self):
-        """Pretty-print JSON for a VM."""
+        """
+        Pretty-print JSON for a VM.
+        """
         print()
         self.print_vm_definition()
     
     def ui_command_start_vm(self):
-        """Start a stopped VM.
+        """
+        Start a stopped VM.
         
         start_vm, stop_vm, & restart_vm all rely on the guest OS correctly
         handling ACPI events. If ACPI is disabled in the kernel (acpi=off) or
@@ -2134,7 +2223,8 @@ class Vm(ConfigNode):
         rCache.purge_app_cache(self.appId)
     
     def ui_command_reset_vm_to_last_shutdown_state(self):
-        """Reset VM to the state it was in as of last shutdown.
+        """
+        Reset VM to the state it was in as of last shutdown.
         
         Every VM has its disk state automatically snapshotted at shutdown.
         This command re-publishes the VM using the last snapshot state (which is
@@ -2156,7 +2246,8 @@ class Vm(ConfigNode):
         rCache.purge_app_cache(self.appId)
     
     def ui_command_stop_vm(self):
-        """Gracefully stop a running VM.
+        """
+        Gracefully stop a running VM.
         
         start_vm, stop_vm, & restart_vm all rely on the guest OS correctly
         handling ACPI events. If ACPI is disabled in the kernel (acpi=off) or
@@ -2176,7 +2267,8 @@ class Vm(ConfigNode):
         rCache.purge_app_cache(self.appId)
     
     def ui_command_poweroff_vm(self):
-        """Cut the power to a VM, hopefully forcing it off immediately.
+        """
+        Cut the power to a VM, hopefully forcing it off immediately.
         
         Sadly, this does not always work.
         In particularl, Ravello has a bug where VMs in 'STOPPING' state don't
@@ -2195,7 +2287,8 @@ class Vm(ConfigNode):
         rCache.purge_app_cache(self.appId)
     
     def ui_command_restart_vm(self):
-        """Gracefully restart a running VM.
+        """
+        Gracefully restart a running VM.
         
         start_vm, stop_vm, & restart_vm all rely on the guest OS correctly
         handling ACPI events. If ACPI is disabled in the kernel (acpi=off) or
