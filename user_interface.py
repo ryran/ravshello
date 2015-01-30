@@ -5,7 +5,7 @@
 # Modules from standard library
 from __future__ import print_function
 from sys import stdout, stdin
-from pydoc import pager
+from pydoc import pager, pipepager
 from time import sleep, time
 from os import path, makedirs, chmod, remove
 from datetime import datetime, date
@@ -494,15 +494,15 @@ class Billing(ConfigNode):
             month='@prompt', year=date.today().year):
         """Print full JSON for all charges in a specific month.
         
-        Optionally specify outputFile as a relative or absolute path on the
+        Optionally specify *outputFile* as a relative or absolute path on the
         local system.
         
-        Optionally specify month to avoid being prompted.
-        Setting month to 0 is the same as specifying the number of the current
-        month. Specifying a negative number for month will cause year
+        Optionally specify *month* to avoid being prompted.
+        Setting *month* to 0 is the same as specifying the number of the current
+        month. Specifying a negative number for *month* will cause *year*
         specification to be ignored (-1 is last month, -24 is 2 years ago).
         
-        The year can only be specified as an absolute (positive) number.
+        The *year* can only be specified as an absolute (positive) number.
         """
         print()
         outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
@@ -539,10 +539,68 @@ class Billing(ConfigNode):
             print(c.green("Wrote billing information to file: '{}'".format(outputFile)))
         print()
     
+    def ui_command_export_month_to_csv(self, outputFile='@term',
+            month='@prompt', year=date.today().year, sortBy='kerb'):
+        """Export per-app details of a particular month in CSV format.
+        
+        Optionally specify *month* to avoid being prompted.
+        Setting *month* to 0 is the same as specifying the number of the
+        current month. Specifying a negative number for *month* will cause year
+        specification to be ignored (-1 is last month, -24 is 2 years ago).
+        
+        The *year* can only be specified as an absolute (positive) number.
+
+        Optionally specify *outputFile* as @pager or as a relative / absolute
+        path on the local system.
+        
+        With *sortBy*, charges can be sorted by Ravello acct user ('rav') or
+        kerberos user ('kerb').
+        """
+        
+        print()
+        outputFile = self.ui_eval_param(outputFile, 'string', '@term')
+        month = self.ui_eval_param(month, 'string', '@prompt')
+        year = self.ui_eval_param(year, 'number', date.today().year)
+        try:
+            month, year = self.validate_or_prompt_for_month(month, year)
+        except:
+            return
+        sortBy = self.ui_eval_param(sortBy, 'string', 'kerb')
+        if not sortBy in 'rav' and not sortBy in 'kerb':
+            print(c.RED("Specify sortBy as 'rav' or 'kerb'\n"))
+            return
+        print(c.yellow("Pulling summary of charges for {}-{} . . .\n"
+                       .format(year, month_name[month])))
+        try:
+            b = rClient.get_billing_for_month(year, month)
+        except:
+            print(c.red("Problem getting billing info!\n"))
+            raise
+        csv = self.gen_csv(b, sortBy)
+        if outputFile == '@term':
+            print(csv)
+        elif outputFile == '@pager':
+            pager(csv)
+        else:
+            try:
+                ui.prepare_file_for_writing(outputFile)
+            except:
+                return
+            try:
+                with open(outputFile, 'w') as f:
+                    f.write(csv)
+            except IOError as e:
+                print(c.RED("Problem writing billing information!\n"
+                            "  {}\n".format(e)))
+                return
+            print(c.green("Wrote billing information as CSV to file: '{}'".format(outputFile)))
+        print()
+    
+    
     def ui_command_this_months_summary(self, sortBy='kerb'):
         """Print billing summary of all charges since beginning of this month.
         
-        With sortBy, charges can be sorted by Ravello acct user ('rav') or
+        With *sortBy*, charges can be sorted by Ravello acct user ('rav') or
         kerberos user ('kerb').
         """
         print()
@@ -557,20 +615,20 @@ class Billing(ConfigNode):
             print(c.red("Problem getting billing info!\n"))
             raise
         print("Note: data could be up to 1 hour old\n")
-        self.process_billing(b, sortBy)
+        self.print_billing(b, sortBy)
         print()
     
     def ui_command_select_month_summary(self, month='@prompt',
             year=date.today().year, sortBy='kerb'):
         """Print billing summary of all charges in a specific month.
         
-        Setting month to 0 is the same as specifying the number of the current
-        month. Specifying a negative number for month will cause year
+        Setting *month* to 0 is the same as specifying the number of the current
+        month. Specifying a negative number for *month* will cause *year*
         specification to be ignored (-1 is last month, -24 is 2 years ago).
         
-        The year can only be specified as an absolute (positive) number.
+        The *year* can only be specified as an absolute (positive) number.
         
-        With sortBy, charges can be sorted by Ravello acct user ('rav') or
+        With *sortBy*, charges can be sorted by Ravello acct user ('rav') or
         kerberos user ('kerb'), with the latter being the default.
         """
         print()
@@ -591,11 +649,14 @@ class Billing(ConfigNode):
         except:
             print(c.red("Problem getting billing info!\n"))
             raise
-        self.process_billing(b, sortBy)
+        self.print_billing(b, sortBy)
         print()
     
-    def process_billing(self, monthsCharges, sortBy):
-        """Crunch the numbers on *monthsCharges*, a list containing dicts."""
+    def _process_billing_input(self, monthsCharges, sortBy):
+        """Crunch the numbers on list returned by RavelloClient.get_billing()
+        
+        Return 2 dictionaries which can be used by print_billing() or gen_csv().
+        """
         appsByUser = {}
         chargesByProduct = {}
         for app in monthsCharges:
@@ -647,7 +708,23 @@ class Billing(ConfigNode):
                 'totalCharges': totalCharges,
                 'creationTime': creationTime,
                 })
-        
+        return appsByUser, chargesByProduct
+    
+    def gen_csv(self, monthsCharges, sortBy):
+        """Generate CSV-formatted output of billing info."""
+        appsByUser, chargesByProduct = self._process_billing_input(monthsCharges, sortBy)
+        out = [
+            "User,App Name,App Hours,App Charges"
+            ]
+        for user in appsByUser:
+            for app in sorted(appsByUser[user], key=itemgetter('creationTime')):
+                out.append("{},{},{},{}".format(
+                    user, app['appName'], app['appHours'], app['totalCharges']))
+        return "\n".join(out)
+    
+    def print_billing(self, monthsCharges, sortBy):
+        """Print billing goodness to screen in pretty colors."""
+        appsByUser, chargesByProduct = self._process_billing_input(monthsCharges, sortBy)
         acctGrandTotal = 0
         for user in appsByUser:
             userTotalHours = 0
@@ -685,7 +762,6 @@ class Billing(ConfigNode):
                 print("    " +
                       c.REVERSE("${:7.2f}\t{:g}".format(userGrandTotal, userTotalHours)))
             print()
-        
         prodGrandTotal = 0
         print(c.BLUE("\nCharges by product:"))
         print(c.magenta("    Charges\tUnit Price\tCount\tProduct Name"))
