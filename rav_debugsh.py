@@ -31,7 +31,7 @@ try:
     ravello_sdk.is_rsaw_sdk()
 except:
     print("Missing proper version of required python module (rsaw's ravello_sdk)\n"
-          "Get it from https://github.com/ryran/python-sdk/tree/experimental\n")
+          "Get it from https://github.com/ryran/python-sdk/blob/master/lib/ravello_sdk.py\n")
     raise
 
 
