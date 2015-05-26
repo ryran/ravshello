@@ -5,3 +5,4 @@ ravello_sdk.py*
 *.egg-info
 .*.swp
 .*.swo
+configshell_fb
