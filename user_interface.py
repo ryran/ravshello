@@ -7,7 +7,9 @@ from __future__ import print_function
 from sys import stdout, stdin
 from pydoc import pager, pipepager
 from time import sleep, time
-from os import path, makedirs, chmod, remove
+from stat import S_ISDIR, S_ISREG
+from os import path, makedirs, chmod, remove, stat
+from glob import glob
 from datetime import datetime, date
 from calendar import month_name
 from operator import itemgetter
@@ -49,6 +51,23 @@ def is_admin():
         return True
     else:
         return False
+
+
+def complete_path(path, stat_fn):
+    """Return filenames to ui_complete_*() meths for path completion.
+    
+    Taken from targetcli's ui_backstore module.
+    """
+    filtered = []
+    for entry in glob(path + '*'):
+        st = stat(entry)
+        if S_ISDIR(st.st_mode):
+            filtered.append(entry + '/')
+        elif stat_fn(st.st_mode):
+            filtered.append(entry)
+    # Put directories at the end
+    return sorted(filtered,
+                  key=lambda s: '~'+s if s.endswith('/') else s)
 
 
 def get_num_learner_active_vms(learner):
@@ -545,6 +564,41 @@ class Billing(ConfigNode):
             print(c.green("Wrote billing information to file: '{}'".format(outputFile)))
         print()
     
+    def _complete_file_month_year(self, parameters, text, current_param):
+        if current_param == 'outputFile':
+            completions = complete_path(text, S_ISREG)
+            if len(completions) == 1 and not completions[0].endswith('/'):
+                completions = [completions[0] + ' ']
+            return completions
+        elif current_param == 'month':
+            L = map(str, range(-12, 13))
+            L.insert(0, '@prompt')
+            completions = [a for a in L
+                           if a.startswith(text)]
+        elif current_param == 'year':
+            L = map(str, range(2013, date.today().year + 1))
+            completions = [a for a in L
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
+            
+    def ui_complete_inspect_all_charges(self, parameters, text, current_param):
+        return self._complete_file_month_year(parameters, text, current_param)
+    
+    def _complete_file_month_year_sortby(self, parameters, text, current_param):
+        completions = self._complete_file_month_year(parameters, text, current_param)
+        if current_param == 'sortBy':
+            completions = [a for a in ['nick', 'user']
+                           if a.startswith(text)]
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
+    
     def ui_command_export_month_to_csv(self, outputFile='@term',
             month='@prompt', year=date.today().year, sortBy='nick'):
         """
@@ -603,6 +657,8 @@ class Billing(ConfigNode):
             print(c.green("Wrote billing information as CSV to file: '{}'".format(outputFile)))
         print()
     
+    def ui_complete_export_month_to_csv(self, parameters, text, current_param):
+        return self._complete_file_month_year_sortby(parameters, text, current_param)
     
     def ui_command_this_months_summary(self, outputFile='@pager', sortBy='nick'):
         """
@@ -645,6 +701,22 @@ class Billing(ConfigNode):
                             "  {}\n".format(e)))
                 return
             print(c.green("Wrote billing information to file: '{}'\n".format(outputFile)))
+    
+    def ui_complete_this_months_summary(self, parameters, text, current_param):
+        if current_param == 'outputFile':
+            completions = complete_path(text, S_ISREG)
+            if len(completions) == 1 and not completions[0].endswith('/'):
+                completions = [completions[0] + ' ']
+            return completions
+        elif current_param == 'sortBy':
+            completions = [a for a in ['nick', 'user']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
     
     def ui_command_select_month_summary(self, outputFile='@pager',
             month='@prompt', year=date.today().year, sortBy='nick'):
@@ -700,6 +772,9 @@ class Billing(ConfigNode):
                             "  {}\n".format(e)))
                 return
             print(c.green("Wrote billing information to file: '{}'\n".format(outputFile)))
+    
+    def ui_complete_select_month_summary(self, parameters, text, current_param):
+        return self._complete_file_month_year_sortby(parameters, text, current_param)
     
     def _process_billing_input(self, monthsCharges, sortBy):
         """Crunch the numbers on list returned by RavelloClient.get_billing()
@@ -1110,7 +1185,15 @@ class Blueprints(ConfigNode):
             print(c.green("Exported bp to file: '{}'".format(f)))
         print()
     
-    def create_bp_from_json_obj(self, bpDefinition, bpFileName=None):
+    def ui_complete_backup_all_bps(self, parameters, text, current_param):
+        if current_param != 'bpDir':
+            return []
+        completions = complete_path(text, S_ISDIR)
+        if len(completions) == 1 and not completions[0].endswith('/'):
+            completions = [completions[0] + ' ']
+        return completions
+    
+    def create_bp_from_json_obj(self, bpDefinition, bpFileName=None, name='@prompt', desc='@prompt'):
         """Create a new blueprint from a json blueprint defition."""
         def _delete_temporary_app(appId, appName):
             try:
@@ -1128,10 +1211,16 @@ class Blueprints(ConfigNode):
         else:
             bpName = path.basename(bpFileName)
             bpDescription = "Created by {} from blueprint file '{}'".format(user, bpName)
+            bpName = bpName.rstrip('.json')
         
-        # Prompt for a blueprint name
-        b = raw_input(c.CYAN("\nEnter a unique name for your new blueprint [{}]: ".format(bpName.strip('.json'))))
-        if len(b): bpName = b
+        # Prompt for a blueprint name if necessary
+        if name == '@prompt':
+            b = raw_input(c.CYAN("\nEnter a unique name for your new blueprint [{}]: ".format(bpName)))
+            if len(b): bpName = b
+        elif name == '@auto':
+            pass
+        else:
+            bpName = name
         
         # Create temporary application from bp
         appName = appnamePrefix + 'BpTempApp'
@@ -1146,9 +1235,14 @@ class Blueprints(ConfigNode):
                         "Cannot continue with restore!\n".format(appName)))
             raise
         
-        # Prompt for description
-        d = raw_input(c.CYAN("\nOptionally enter a description for your new blueprint [{}]: ".format(bpDescription)))
-        if len(d): bpDescription = d
+        # Prompt for description if necessary
+        if desc == '@prompt':
+            d = raw_input(c.CYAN("\nOptionally enter a description for your new blueprint [{}]: ".format(bpDescription)))
+            if len(d): bpDescription = d
+        elif desc == '@auto':
+            pass
+        else:
+            bpDescription = desc
         
         # Create request dictionary and post new bp
         req = {"applicationId": newApp['id'], "blueprintName": bpName, "offline": "true", "description": bpDescription}
@@ -1158,21 +1252,15 @@ class Blueprints(ConfigNode):
             print(c.red("\nProblem creating new blueprint!\n"))
             _delete_temporary_app(newApp['id'], appName)
             raise
-        print(c.green("\nSUCCESS! New blueprint created!"))
+        print(c.green("\nSUCCESS! New blueprint '{}' created!".format(bpName)))
         
         # Delete temp app
         _delete_temporary_app(newApp['id'], appName)
-
         # Add new bp to directory tree                                                                       
         Bp("%s" % newBp['name'], self, newBp['id'], newBp['creationTime'])
-        
-        # View new blueprint?
-        response = raw_input(c.CYAN("\nView new blueprint definition? [y/N] "))
-        if response == 'y':
-            self.get_child(bpName).print_bp_definition()
         print()
     
-    def ui_command_create_bp_from_file(self, inputFile='@prompt'):
+    def ui_command_create_bp_from_file(self, inputFile='@prompt', name='@prompt', desc='@prompt'):
         """
         Create a blurprint from JSON file in <CFGDIR>/blueprints.
         
@@ -1185,8 +1273,14 @@ class Blueprints(ConfigNode):
             - backup_all_bps
             - backup_bp
             - print_bp_definition outputFile=PATH
+        
+        Optionally specify name and/or desc on the command-line to avoid
+        prompting (both default to '@prompt' and both can be set to '@auto'
+        to skip prompting).
         """
         inputFile = self.ui_eval_param(inputFile, 'string', '@prompt')
+        name = self.ui_eval_param(name, 'string', '@prompt')
+        desc = self.ui_eval_param(desc, 'string', '@prompt')
         if inputFile == '@prompt':
             print()
             # Get a list of what is in local cache
@@ -1218,7 +1312,29 @@ class Blueprints(ConfigNode):
             print(c.RED("Problem importing json data from file!\n"))
             raise
         # Make the magic happen
-        self.create_bp_from_json_obj(bpDefinition, inputFile)
+        self.create_bp_from_json_obj(bpDefinition, inputFile, name, desc)
+    
+    def ui_complete_create_bp_from_file(self, parameters, text, current_param):
+        if current_param == 'inputFile':
+            completions = complete_path(text, S_ISREG)
+            if len(completions) == 1 and not completions[0].endswith('/'):
+                completions = [completions[0] + ' ']
+            return completions
+        elif current_param == 'name':
+            L = ['@prompt', '@auto']
+            for bp in rClient.get_blueprints():
+                L.append(bp['name'])
+            completions = [a for a in L
+                           if a.startswith(text)]
+        elif current_param == 'desc':
+            completions = [a for a in ['@prompt', '@auto']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
 
 
 class Bp(ConfigNode):
@@ -1253,33 +1369,44 @@ class Bp(ConfigNode):
         print(c.green("Deleted blueprint {}\n".format(self.bpName)))
         self.parent.remove_child(self)
     
-    def ui_command_delete_bp(self, confirm='true', backupB4del='true'):
+    def ui_command_delete_bp(self, noconfirm='false', nobackup='false'):
         """
         Delete a blueprint.
         
         By default, blueprint will automatically be saved to
         <CFGDIR>/blueprints/<BlueprintName>.json, overwriting any existing
-        file. Disable with backupB4del=false.
+        file. Disable with nobackup=true.
         
         By default, confirmation will be required to delete the blueprint.
-        Disable prompt with confirm=false.
+        Disable prompt with noconfirm=true.
         """
-        backupB4del = self.ui_eval_param(backupB4del, 'bool', True)
-        confirm = self.ui_eval_param(confirm, 'bool', True)
+        noconfirm = self.ui_eval_param(noconfirm, 'bool', False)
+        nobackup = self.ui_eval_param(nobackup, 'bool', False)
         print()
-        if backupB4del:
+        if not nobackup:
             print("Backing up blueprint definition to local file before deleting . . .")
             self.ui_command_backup_bp()
             print("Blueprint can be recreated from file later with {} command\n"
-                  .format(c.BOLD("restore_bp_from_file")))
-        if confirm:
+                  .format(c.BOLD("create_bp_from_file")))
+        if not noconfirm:
             c.slow_print(c.RED("Deleting a blueprint cannot be undone -- make sure you know what you're doing\n"))
             response = raw_input(c.CYAN("Continue with blueprint deletion? [y/N] "))
             print()
-        if not confirm or response == 'y':
+        if noconfirm or response == 'y':
             self.delete_bp()
         else:
             print("Leaving bp intact (probably a good choice)\n")
+    
+    def ui_complete_delete_bp(self, parameters, text, current_param):
+        if current_param in ['noconfirm', 'nobackup']:
+            completions = [a for a in ['false', 'true']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
     
     def ui_command_find_bp_publish_locations(self):
         """
@@ -1297,8 +1424,8 @@ class Bp(ConfigNode):
         """
         Pretty-print blueprint JSON in pager or export to outputFile.
         
-        Optionally specify *outputFile* as a relative or absolute path on the
-        local system.
+        Optionally specify outputFile as a relative or absolute path on the
+        local system (tab-completion available).
         """
         print()
         outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
@@ -1318,12 +1445,22 @@ class Bp(ConfigNode):
                 return
             print(c.green("Exported bp definition to file: '{}'\n".format(outputFile)))
     
+    def ui_complete_print_bp_definition(self, parameters, text, current_param):
+        if current_param != 'outputFile':
+            return []
+        completions = complete_path(text, S_ISREG)
+        if len(completions) == 1 and not completions[0].endswith('/'):
+            completions = [completions[0] + ' ']
+        return completions
+    
     def ui_command_backup_bp(self):
         """
         Export blueprint XML and store to a JSON file in <CFGDIR>/blueprints.
         
         File names are determined automatically from the blueprint name (plus an
         extension of ".json"). Existing files are overwritten.
+        
+        To save to a specific path, use print_bp_defition command.
         """
         print()
         d = path.join(rOpt.userCfgDir, 'blueprints')
@@ -1338,14 +1475,37 @@ class Bp(ConfigNode):
             raise
         print(c.green("Exported bp to file: '{}'\n".format(f)))
     
-    def ui_command_make_bp_copy(self):
+    def ui_command_make_bp_copy(self, name='@prompt', desc='@prompt'):
         """
         Create a copy of an existing blueprint.
+        
+        Optionally specify name and/or desc on the command-line to avoid
+        prompting (both default to '@prompt' and both can be set to '@auto'
+        to skip prompting).
         """
+        name = self.ui_eval_param(name, 'string', '@prompt')
+        desc = self.ui_eval_param(desc, 'string', '@prompt')
         # Get current blueprint def
         bpDefinition = rClient.get_blueprint(self.bpId)
         # Make the magic happen
-        self.parent.create_bp_from_json_obj(bpDefinition)
+        self.parent.create_bp_from_json_obj(bpDefinition, name=name, desc=desc)
+    
+    def ui_complete_make_bp_copy(self, parameters, text, current_param):
+        if current_param == 'name':
+            L = ['@prompt', '@auto']
+            for bp in rClient.get_blueprints():
+                L.append(bp['name'])
+            completions = [a for a in L
+                           if a.startswith(text)]
+        elif current_param == 'desc':
+            completions = [a for a in ['@prompt', '@auto']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
 
 
 class Applications(ConfigNode):
@@ -1395,12 +1555,12 @@ class Applications(ConfigNode):
         self.refresh()
         print(c.green("DONE!\n"))
     
-    def ui_command__DELETE_ALL_APPS_(self, confirm='true'):
+    def ui_command_DELETE_ALL_APPS(self, noconfirm='false'):
         """
         Deletes all user applications.
         
         Allows deleting all apps associated with your username.
-        Use confirm=false with care.
+        Use noconfirm=true (or simply an arg of true) with care.
         """
         print()
         if is_admin() and rOpt.showAllApps:
@@ -1409,14 +1569,14 @@ class Applications(ConfigNode):
             print("Log out and use -a/--admin instead of -A/--allapps\n"
                   "That will allow you to quickly delete all apps that include your kerberos in their name\n")
             return
-        confirm = self.ui_eval_param(confirm, 'bool', True)
-        if confirm:
+        noconfirm = self.ui_eval_param(noconfirm, 'bool', False)
+        if not noconfirm:
             c.slow_print(c.bgRED("  W A R N I N G ! ! ! !"))
             c.slow_print(c.RED("\nPress Ctrl-c now unless you are ABSOLUTELY SURE you want to delete all of your applications!"))
             c.slow_print(c.RED("ARE YOU POSITIVELY CONFIDENT THAT ALL OF YOUR VMs SHOULD BE DESTROYED?"))
             response = raw_input(c.CYAN("\nType 'yes!' in ALL CAPS to continue: "))
             print()
-        if not confirm or response == 'YES!':
+        if noconfirm or response == 'YES!':
             rCache.purge_app_cache()
             for app in rClient.get_applications():
                 if app['name'].startswith(appnamePrefix):
@@ -1433,6 +1593,17 @@ class Applications(ConfigNode):
             print("Whew! That was close! Leaving your apps alone sounds like a good idea")
         print()
     
+    def ui_complete_DELETE_ALL_APPS(self, parameters, text, current_param):
+        if current_param == 'noconfirm':
+            completions = [a for a in ['false', 'true']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
+    
     def ui_command_create_app(self, blueprint='@prompt', name='@prompt',
             desc='@prompt', publish='true', region='@prompt',
             startAllVms='true'):
@@ -1440,8 +1611,13 @@ class Applications(ConfigNode):
         Interactively create a new application from a base blueprint.
         
         Optionally specify all parameters on the command-line.
-        Note that application name, desc, region can be set to '@auto'.
-        If run with publish=false, the publish_app command can be run later.
+        Note that application name, desc, region can be set to '@auto';
+        however, due to a limitation in ConfigShell, desc cannot accept
+        multiple arguments (i.e., you cannot pass multiple words with
+        spaces, even if you use quotes).
+        
+        If run with publish=false, the publish_app command can be run
+        later from the app-specific context (/apps/APPNAME/).
         """
         blueprint = self.ui_eval_param(blueprint, 'string', '@prompt')
         name = self.ui_eval_param(name, 'string', '@prompt')
@@ -1557,6 +1733,63 @@ class Applications(ConfigNode):
             self.get_child(appName).ui_command_publish_app(region, startAllVms)
         else:
             print()
+    
+    def ui_complete_create_app(self, parameters, text, current_param):
+        if current_param == 'blueprint':
+            allowedBlueprints = ['@prompt']
+            blueprints = rClient.get_blueprints()
+            for bp in blueprints:
+                try:
+                    description = bp['description']
+                except:
+                    description = ''
+                if is_admin() or any(tag in description for tag in rOpt.learnerBlueprintTag) or '#k:{}'.format(user) in description:
+                    allowedBlueprints.append(bp['name'])
+            completions = [a for a in allowedBlueprints
+                           if a.startswith(text)]
+        elif current_param in ['name', 'desc']:
+            completions = [a for a in ['@prompt', '@auto']
+                           if a.startswith(text)]
+        elif current_param == 'publish':
+            completions = [a for a in ['true', 'false']
+                           if a.startswith(text)]
+        elif current_param == 'region':
+            L = ['@prompt', '@auto']
+            try:
+                blueprint = parameters['blueprint']
+            except:
+                completions = [a for a in L
+                               if a.startswith(text)]
+            else:
+                allowedBlueprints = {}
+                blueprints = rClient.get_blueprints()
+                for bp in blueprints:
+                    try:
+                        description = bp['description']
+                    except:
+                        description = ''
+                    if is_admin() or any(tag in description for tag in rOpt.learnerBlueprintTag) or '#k:{}'.format(user) in description:
+                        allowedBlueprints[bp['name']] = bp['id']
+                try:
+                    bpid = allowedBlueprints[blueprint]
+                except:
+                    completions = [a for a in L
+                                   if a.startswith(text)]
+                else:
+                    pubLocations = rClient.get_blueprint_publish_locations(bpid)
+                    for p in pubLocations:
+                        L.append("{}/{}".format(p['cloudName'], p['regionName']))
+                    completions = [a for a in L
+                                   if a.startswith(text)]
+        elif current_param == 'startAllVms':
+            completions = [a for a in ['true', 'false']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
 
 
 class App(ConfigNode):
@@ -1680,7 +1913,7 @@ class App(ConfigNode):
         if note == '@prompt':
             print("Notes can be seen with the {} command\n"
                   .format(c.BOLD("ls")))
-        
+    
     def ui_command_loop_query_app_status(self, desiredState=None,
             intervalSec=20, totalMin=30):
         """
@@ -1697,13 +1930,24 @@ class App(ConfigNode):
             if intervalSec < 5:
                 print(c.red("\nUsing minimum learner interval of 5 sec"))
                 intervalSec = 5
-            if totalMin > 65:
-                print(c.red("\nUsing maximum learner watch-time of 65 min"))
-                totalMin = 65
+            if totalMin > 60:
+                print(c.red("\nUsing maximum learner watch-time of 60 min"))
+                totalMin = 60
             elif totalMin < 1:
                 print(c.red("\nUsing minimum learner watch-time of 1 min"))
                 totalMin = 1
         self.loop_query_app_status(desiredState, intervalSec, totalMin)
+    
+    def ui_complete_loop_query_app_status(self, parameters, text, current_param):
+        if current_param == 'desiredState':
+            completions = [a for a in ['STARTED', 'STOPPED']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
     
     def loop_query_app_status(self, desiredState=None, intervalSec=20, totalMin=30):
         maxLoops = totalMin * 60 / intervalSec
@@ -1841,7 +2085,7 @@ class App(ConfigNode):
             print()
         return allVmsAreStarted, allVmsAreStopped
     
-    def extend_app_autostop(self, minutes=65):
+    def extend_app_autostop(self, minutes=60):
         if not self.confirm_app_is_published():
             return False
         req = {'expirationFromNowSeconds': minutes * 60}
@@ -1854,23 +2098,38 @@ class App(ConfigNode):
                       .format(minutes)))
         rCache.purge_app_cache(self.appId)
     
-    def ui_command_extend_app_autostop(self, minutes=65):
+    def ui_command_extend_app_autostop(self, minutes=60):
         """
         Set the application auto-stop time in minutes.
         
-        Learners can only set auto-stop from 0 up to the default of 65 min.
+        Learners can only set auto-stop from 0 up to the default of 60 min.
         Admins can set any value, including '-1' which disables auto-stop timer.
         """
-        minutes = self.ui_eval_param(minutes, 'number', 65)
+        minutes = self.ui_eval_param(minutes, 'number', 60)
         if not is_admin():
-            if minutes > 65:
-                print(c.red("\nUsing maximum learner auto-stop time of 65 minutes"))
-                minutes = 65
+            if minutes > 60:
+                print(c.red("\nUsing maximum learner auto-stop time of 60 minutes"))
+                minutes = 60
             elif minutes < 0:
                 print(c.RED("\nInvalid learner auto-stop time\n"))
                 return
         self.extend_app_autostop(minutes)
         print()
+    
+    def ui_complete_extend_app_autostop(self, parameters, text, current_param):        
+        if current_param == 'minutes':
+            if is_admin():
+                L = ['-1', '5', '30', '60', '120', '240', '480', '720', '1440']
+            else:
+                L = ['5', '15', '30', '45', '60']
+            completions = [a for a in L
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
     
     def print_app_definition(self):
         pager("JSON definition for APPLICATION '{}'\n".format(self.appName) + 
@@ -1881,7 +2140,7 @@ class App(ConfigNode):
         Pretty-print app JSON in pager or export to outputFile.
         
         Optionally specify outputFile as a relative or absolute path on the
-        local system.
+        local system (tab-completion available).
         """
         print()
         outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
@@ -1901,6 +2160,14 @@ class App(ConfigNode):
                 return
             print(c.green("Exported app definition to file: '{}'\n".format(outputFile)))
     
+    def ui_complete_print_app_definition(self, parameters, text, current_param):
+        if current_param != 'outputFile':
+            return []
+        completions = complete_path(text, S_ISREG)
+        if len(completions) == 1 and not completions[0].endswith('/'):
+            completions = [completions[0] + ' ']
+        return completions
+    
     def delete_app(self):
         if rCache.get_app(self.appId)['published']:
             published = True
@@ -1917,24 +2184,35 @@ class App(ConfigNode):
         print(c.green("Deleted application {}".format(self.appName)))
         self.parent.remove_child(self)
     
-    def ui_command_delete_app(self, confirm='true'):
+    def ui_command_delete_app(self, noconfirm='false'):
         """
         Delete an application.
         
         By default, confirmation will be required to delete the application.
-        Disable prompt with confirm=false.
+        Disable prompt with noconfirm=true (or simply argument of true).
         """
-        confirm = self.ui_eval_param(confirm, 'bool', True)
+        noconfirm = self.ui_eval_param(noconfirm, 'bool', False)
         print()
-        if confirm:
+        if not noconfirm:
             c.slow_print(c.RED("Deleting an application cannot be undone -- All VM data will be lost\n"))
             response = raw_input(c.CYAN("Continue? [y/N] "))
             print()
-        if not confirm or response == 'y':
+        if noconfirm or response == 'y':
             self.delete_app()
         else:
             print("Leaving app intact (probably a good choice)")
         print()
+    
+    def ui_complete_delete_app(self, parameters, text, current_param):
+        if current_param == 'noconfirm':
+            completions = [a for a in ['false', 'true']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
     
     def ui_command_publish_app(self, region='@prompt', startAllVms='true'):
         """
@@ -1989,10 +2267,10 @@ class App(ConfigNode):
             optimizationLevel = 'COST_OPTIMIZED'
         else:
             for i, loc in enumerate(pubLocations):
-                if region == loc['regionName']:
+                if region == "{}/{}".format(loc['cloudName'], loc['regionName']):
                     optimizationLevel = 'PERFORMANCE_OPTIMIZED'
                     preferredCloud = loc['cloudName']
-                    preferredRegion = region
+                    preferredRegion = loc['regionName']
                     break
             else:
                 print(c.RED("Invalid region specified!\n"))
@@ -2015,6 +2293,24 @@ class App(ConfigNode):
         else:
             rCache.purge_app_cache(self.appId)
             print()
+    
+    def ui_complete_publish_app(self, parameters, text, current_param):
+        if current_param == 'region':
+            L = ['@prompt', '@auto']
+            pubLocations = rClient.get_application_publish_locations(self.appId)
+            for p in pubLocations:
+                L.append("{}/{}".format(p['cloudName'], p['regionName']))
+            completions = [a for a in L
+                           if a.startswith(text)]
+        elif current_param == 'startAllVms':
+            completions = [a for a in ['true', 'false']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
     
     def ui_command_start_app(self):
         """
@@ -2093,9 +2389,9 @@ class App(ConfigNode):
                 newImg = rClient.create_images(imageReq)
             except:
                 raise
-
             print("\n New image {} is created for vm {}".format(newImg['name'],appDetails['design']['vms'][i]['name']))
         print()
+
 
 
 class Vms(ConfigNode):
@@ -2192,12 +2488,38 @@ class Vm(ConfigNode):
         pager("JSON definition for VM '{}' in APPLICATION '{}'\n".format(self.vmName, self.appName) +
               ui.prettify_json(rClient.get_vm(self.appId, self.vmId, aspect='deployment')))
     
-    def ui_command_print_vm_definition(self):
+    def ui_command_print_vm_definition(self, outputFile='@pager'):
         """
-        Pretty-print JSON for a VM.
+        Pretty-print VM JSON in pager or export to outputFile.
+        
+        Optionally specify outputFile as a relative or absolute path on the
+        local system (tab-completion available).
         """
         print()
-        self.print_vm_definition()
+        outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
+        if outputFile == '@pager':
+            self.print_vm_definition()
+        else:
+            try:
+                ui.prepare_file_for_writing(outputFile)
+            except:
+                return
+            try:
+                with open(outputFile, 'w') as f:
+                    json.dump(rClient.get_vm(self.appId, self.vmId, aspect='deployment'), f, indent=4)
+            except IOError as e:
+                print(c.RED("Problem writing VM definition for '{}' in APP '{}'\n"
+                            "  {}\n".format(self.vmName, self.appName, e)))
+                return
+            print(c.green("Exported VM definition to file: '{}'\n".format(outputFile)))
+    
+    def ui_complete_print_vm_definition(self, parameters, text, current_param):
+        if current_param != 'outputFile':
+            return []
+        completions = complete_path(text, S_ISREG)
+        if len(completions) == 1 and not completions[0].endswith('/'):
+            completions = [completions[0] + ' ']
+        return completions
     
     def ui_command_start_vm(self):
         """
