@@ -345,9 +345,8 @@ class Event(ConfigNode):
         if userEmail == '@moi':
             userId = None
         else:
-            # Don't care what the following returns
-            # Only doing it to use this method's logic to auto-refresh if needed
-            rCache.get_user('x')
+            # The following conditionally updates the cache and returns None
+            rCache.get_user()
             for userId in rCache.userCache:
                 if not userId == '_timestamp' and rCache.userCache[userId]['email'] == userEmail:
                     break
@@ -367,7 +366,7 @@ class Event(ConfigNode):
     
     def ui_complete_register_alert(self, parameters, text, current_param):
         if current_param == 'userEmail':
-            rCache.get_user('x')
+            rCache.get_user()
             L = []
             for userId in rCache.userCache:
                 if not userId == '_timestamp':
@@ -1419,16 +1418,16 @@ class Bp(ConfigNode):
         noconfirm = self.ui_eval_param(noconfirm, 'bool', False)
         nobackup = self.ui_eval_param(nobackup, 'bool', False)
         print()
-        if not nobackup:
-            print("Backing up blueprint definition to local file before deleting . . .")
-            self.ui_command_backup_bp()
-            print("Blueprint can be recreated from file later with {} command\n"
-                  .format(c.BOLD("create_bp_from_file")))
         if not noconfirm:
             c.slow_print(c.RED("Deleting a blueprint cannot be undone -- make sure you know what you're doing\n"))
             response = raw_input(c.CYAN("Continue with blueprint deletion? [y/N] "))
             print()
         if noconfirm or response == 'y':
+            if not nobackup:
+                print("Backing up blueprint definition to local file before deleting . . .")
+                self.ui_command_backup_bp()
+                print("Blueprint can be recreated from file later with {} command\n"
+                      .format(c.BOLD("create_bp_from_file")))
             self.delete_bp()
         else:
             print("Leaving bp intact (probably a good choice)\n")
