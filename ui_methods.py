@@ -145,6 +145,7 @@ class RavelloCache(object):
         """Initialize using *client*, an instance of ravello_sdk.RavelloClient()."""
         self.r = rClient
         self.appCache = {}
+        self.bpCache = {}
         self.userCache = {}
         self.alertCache = {}
     
@@ -186,9 +187,14 @@ class RavelloCache(object):
         self.userCache = {}
     
     def get_user(self, userId):
-        if userId in self.userCache:
-            if get_timestamp_proximity(self.userCache['_timestamp']) < -60:
+        try:
+            ts = self.userCache['_timestamp']
+        except:
+            self.update_user_cache()
+        else:
+            if get_timestamp_proximity(ts) < -60:
                 self.update_user_cache()
+        if userId in self.userCache:
             return self.userCache[userId]
         else:
             return None

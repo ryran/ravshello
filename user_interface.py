@@ -229,7 +229,7 @@ class Events(ConfigNode):
         """
         Pretty-print JSON list of Ravello event names.
         
-        Optionally specify outputFile as a relative or absolute path on the
+        Optionally specify *outputFile* as a relative or absolute path on the
         local system; otherwise output will be piped to pager.
         
         Alerts can be registered for any of the returned event names with the
@@ -253,6 +253,14 @@ class Events(ConfigNode):
                 return
             print(c.green("Exported event names to file: '{}'\n".format(outputFile)))
     
+    def ui_complete_print_event_names(self, parameters, text, current_param):
+        if current_param != 'outputFile':
+            return []
+        completions = complete_path(text, S_ISREG)
+        if len(completions) == 1 and not completions[0].endswith('/'):
+            completions = [completions[0] + ' ']
+        return completions
+    
     def print_registered_alerts(self):
         pager("JSON list of REGISTERED USER ALERTS\n" +
               ui.prettify_json(rClient.get_alerts()))
@@ -264,7 +272,7 @@ class Events(ConfigNode):
         Assuming the current Ravello user is an admin, they will actually see
         all alerts in the organization.
         
-        Optionally specify outputFile as a relative or absolute path on the
+        Optionally specify *outputFile* as a relative or absolute path on the
         local system.
         
         Create alerts with the register_alert command.
@@ -286,6 +294,14 @@ class Events(ConfigNode):
                             "  {}\n".format(e)))
                 return
             print(c.green("Exported userAlerts to file: '{}'\n".format(outputFile)))
+    
+    def ui_complete_print_registered_alerts(self, parameters, text, current_param):
+        if current_param != 'outputFile':
+            return []
+        completions = complete_path(text, S_ISREG)
+        if len(completions) == 1 and not completions[0].endswith('/'):
+            completions = [completions[0] + ' ']
+        return completions
 
 
 class Event(ConfigNode):
@@ -329,9 +345,11 @@ class Event(ConfigNode):
         if userEmail == '@moi':
             userId = None
         else:
+            # Don't care what the following returns
+            # Only doing it to use this method's logic to auto-refresh if needed
+            rCache.get_user('x')
             for userId in rCache.userCache:
-                if rCache.userCache[userId]['email'] == userEmail:
-                    userId = rCache.userCache[userId]['id']
+                if not userId == '_timestamp' and rCache.userCache[userId]['email'] == userEmail:
                     break
             else:
                 print(c.RED("No Ravello user on your account with that email!\n"))
@@ -346,6 +364,23 @@ class Event(ConfigNode):
         print(c.green("DONE!\n"))
         rCache.purge_alert_cache()
         self.refresh()
+    
+    def ui_complete_register_alert(self, parameters, text, current_param):
+        if current_param == 'userEmail':
+            rCache.get_user('x')
+            L = []
+            for userId in rCache.userCache:
+                if not userId == '_timestamp':
+                    L.append(rCache.userCache[userId]['email'])
+            completions = [a for a in L
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
+
 
 
 class UserAlert(ConfigNode):
@@ -514,13 +549,10 @@ class Billing(ConfigNode):
                 raise
         return month, year
     
-    def ui_command_inspect_all_charges(self, outputFile='@pager',
-            month='@prompt', year=date.today().year):
+    def ui_command_inspect_all_charges(self, month='@prompt',
+            year=date.today().year, outputFile='@pager'):
         """
         Print full JSON for all charges in a specific month.
-        
-        Optionally specify *outputFile* as a relative or absolute path on the
-        local system.
         
         Optionally specify *month* to avoid being prompted.
         Setting *month* to 0 is the same as specifying the number of the current
@@ -528,10 +560,13 @@ class Billing(ConfigNode):
         specification to be ignored (-1 is last month, -24 is 2 years ago).
         
         The *year* can only be specified as an absolute (positive) number.
+        
+        Optionally specify *outputFile* as a relative or absolute path on the
+        local system.
         """
         print()
-        outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
         month = self.ui_eval_param(month, 'string', '@prompt')
+        outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
         year = self.ui_eval_param(year, 'number', date.today().year)
         try:
             month, year = self.validate_or_prompt_for_month(month, year)
@@ -599,8 +634,8 @@ class Billing(ConfigNode):
         else:
             return completions
     
-    def ui_command_export_month_to_csv(self, outputFile='@term',
-            month='@prompt', year=date.today().year, sortBy='nick'):
+    def ui_command_export_month_to_csv(self, month='@prompt',
+            year=date.today().year, sortBy='nick', outputFile='@term'):
         """
         Export per-app details of a particular month in CSV format.
         
@@ -611,11 +646,11 @@ class Billing(ConfigNode):
         
         The *year* can only be specified as an absolute (positive) number.
 
-        Optionally specify *outputFile* as @pager or as a relative / absolute
-        path on the local system.
-        
         With *sortBy*, charges can be sorted by Ravello user login ('user') or
         ravshello nickname ('nick').
+        
+        Optionally specify *outputFile* as @pager or as a relative / absolute
+        path on the local system.
         """
         
         print()
@@ -660,15 +695,15 @@ class Billing(ConfigNode):
     def ui_complete_export_month_to_csv(self, parameters, text, current_param):
         return self._complete_file_month_year_sortby(parameters, text, current_param)
     
-    def ui_command_this_months_summary(self, outputFile='@pager', sortBy='nick'):
+    def ui_command_this_months_summary(self, sortBy='nick', outputFile='@pager'):
         """
         Print billing summary of all charges since beginning of this month.
         
-        Optionally specify *outputFile* as @term or as a relative / absolute
-        path on the local system.
-        
         With *sortBy*, charges can be sorted by Ravello user login ('user') or
         ravshello nickname ('nick').
+        
+        Optionally specify *outputFile* as @term or as a relative / absolute
+        path on the local system.
         """
         print()
         outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
@@ -718,13 +753,10 @@ class Billing(ConfigNode):
         else:
             return completions
     
-    def ui_command_select_month_summary(self, outputFile='@pager',
-            month='@prompt', year=date.today().year, sortBy='nick'):
+    def ui_command_select_month_summary(self, month='@prompt',
+        year=date.today().year, sortBy='nick', outputFile='@pager'):
         """
         Print billing summary of all charges in a specific month.
-        
-        Optionally specify *outputFile* as @term or as a relative / absolute
-        path on the local system.
         
         Setting *month* to 0 is the same as specifying the number of the current
         month. Specifying a negative number for *month* will cause *year*
@@ -734,6 +766,9 @@ class Billing(ConfigNode):
         
         With *sortBy*, charges can be sorted by Ravello user login ('user') or
         ravshello nickname ('nick').
+        
+        Optionally specify *outputFile* as @term or as a relative / absolute
+        path on the local system.
         """
         print()
         outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
@@ -1152,7 +1187,7 @@ class Blueprints(ConfigNode):
         Export each & every blueprint to a JSON file.
         
         Optionally specify an absolute or relative path; otherwise, default
-        bpDir of @home maps to <CFGDIR>/blueprints. Note also that <CFGDIR>
+        *bpDir* of @home maps to <CFGDIR>/blueprints. Note also that <CFGDIR>
         defaults to '~/.ravshello/', but can be tweaked with the cmdline option
         '--cfgdir'.
         
@@ -1260,11 +1295,12 @@ class Blueprints(ConfigNode):
         Bp("%s" % newBp['name'], self, newBp['id'], newBp['creationTime'])
         print()
     
-    def ui_command_create_bp_from_file(self, inputFile='@prompt', name='@prompt', desc='@prompt'):
+    def ui_command_create_bp_from_file(self, inputFile='@prompt',
+            name='@prompt', desc='@prompt'):
         """
         Create a blurprint from JSON file in <CFGDIR>/blueprints.
         
-        By specifying inputFile on the command-line, you can use a full path,
+        By specifying *inputFile* on the command-line, you can use a full path,
         i.e., choices are not restricted to <CFGDIR>/blueprints. Note also that
         <CFGDIR> defaults to '~/.ravshello/', but can be tweaked with the
         cmdline option '--cfgdir'.
@@ -1274,7 +1310,7 @@ class Blueprints(ConfigNode):
             - backup_bp
             - print_bp_definition outputFile=PATH
         
-        Optionally specify name and/or desc on the command-line to avoid
+        Optionally specify *name* and/or *desc* on the command-line to avoid
         prompting (both default to '@prompt' and both can be set to '@auto'
         to skip prompting).
         """
@@ -1373,12 +1409,12 @@ class Bp(ConfigNode):
         """
         Delete a blueprint.
         
+        By default, confirmation will be required to delete the blueprint.
+        Disable prompt with noconfirm=true.
+        
         By default, blueprint will automatically be saved to
         <CFGDIR>/blueprints/<BlueprintName>.json, overwriting any existing
         file. Disable with nobackup=true.
-        
-        By default, confirmation will be required to delete the blueprint.
-        Disable prompt with noconfirm=true.
         """
         noconfirm = self.ui_eval_param(noconfirm, 'bool', False)
         nobackup = self.ui_eval_param(nobackup, 'bool', False)
@@ -1424,7 +1460,7 @@ class Bp(ConfigNode):
         """
         Pretty-print blueprint JSON in pager or export to outputFile.
         
-        Optionally specify outputFile as a relative or absolute path on the
+        Optionally specify *outputFile* as a relative or absolute path on the
         local system (tab-completion available).
         """
         print()
@@ -1455,12 +1491,12 @@ class Bp(ConfigNode):
     
     def ui_command_backup_bp(self):
         """
-        Export blueprint XML and store to a JSON file in <CFGDIR>/blueprints.
+        Export blueprint definition to a JSON file in <CFGDIR>/blueprints.
         
         File names are determined automatically from the blueprint name (plus an
         extension of ".json"). Existing files are overwritten.
         
-        To save to a specific path, use print_bp_defition command.
+        To save to a specific path, use print_bp_definition command.
         """
         print()
         d = path.join(rOpt.userCfgDir, 'blueprints')
@@ -1479,7 +1515,7 @@ class Bp(ConfigNode):
         """
         Create a copy of an existing blueprint.
         
-        Optionally specify name and/or desc on the command-line to avoid
+        Optionally specify *name* and/or *desc* on the command-line to avoid
         prompting (both default to '@prompt' and both can be set to '@auto'
         to skip prompting).
         """
@@ -1557,7 +1593,7 @@ class Applications(ConfigNode):
     
     def ui_command_DELETE_ALL_APPS(self, noconfirm='false'):
         """
-        Deletes all user applications.
+        Delete all user applications.
         
         Allows deleting all apps associated with your username.
         Use noconfirm=true (or simply an arg of true) with care.
@@ -1611,10 +1647,10 @@ class Applications(ConfigNode):
         Interactively create a new application from a base blueprint.
         
         Optionally specify all parameters on the command-line.
-        Note that application name, desc, region can be set to '@auto';
-        however, due to a limitation in ConfigShell, desc cannot accept
-        multiple arguments (i.e., you cannot pass multiple words with
-        spaces, even if you use quotes).
+        Note that application *name*, *desc*, *region* can be set to '@auto';
+        however, due to a limitation in ConfigShell, *desc* cannot accept
+        multiple arguments (i.e., you cannot pass multiple words with spaces,
+        even if you use quotes).
         
         If run with publish=false, the publish_app command can be run
         later from the app-specific context (/apps/APPNAME/).
@@ -1869,7 +1905,7 @@ class App(ConfigNode):
           command could be limited to around ~200 bytes
           
         - When specifying the note non-interactively with note=<SomeNoteHere>,
-          you cannot use spaces (bummer limitation of configShell!)
+          you cannot use spaces -- a bummer limitation of ConfigShell!
         """
         print()
         note = self.ui_eval_param(note, 'string', '@prompt')
@@ -1919,9 +1955,10 @@ class App(ConfigNode):
         """
         Execute query_app_status command on a loop.
         
-        Optionally specify desiredState -- loop ends if all VMs reach this state.
-        Optionally specify loop interval in seconds.
-        Optionally specify total loop time in minutes.
+        Optionally specify *desiredState* -- loop ends if all VMs reach this
+        state (choose between 'STARTED' & 'STOPPED').
+        Optionally specify loop interval in seconds via *intervalSec*.
+        Optionally specify total loop time in minutes via *totalMin*.
         """
         desiredState = self.ui_eval_param(desiredState, 'string', 'None')
         intervalSec = self.ui_eval_param(intervalSec, 'number', 20)
@@ -2100,7 +2137,7 @@ class App(ConfigNode):
     
     def ui_command_extend_app_autostop(self, minutes=60):
         """
-        Set the application auto-stop time in minutes.
+        Set the application auto-stop time via *minutes*.
         
         Learners can only set auto-stop from 0 up to the default of 60 min.
         Admins can set any value, including '-1' which disables auto-stop timer.
@@ -2137,9 +2174,9 @@ class App(ConfigNode):
     
     def ui_command_print_app_definition(self, outputFile='@pager'):
         """
-        Pretty-print app JSON in pager or export to outputFile.
+        Pretty-print app JSON in pager or export to *outputFile*.
         
-        Optionally specify outputFile as a relative or absolute path on the
+        Optionally specify *outputFile* as a relative or absolute path on the
         local system (tab-completion available).
         """
         print()
@@ -2218,8 +2255,8 @@ class App(ConfigNode):
         """
         Interactively publish an application to the cloud.
         
-        Optionally specify a region and whether all VMs should be started after
-        publishing.
+        Optionally specify *region* and whether all VMs should be started after
+        publishing (*startAllVms*).
         """
         region = self.ui_eval_param(region, 'string', '@prompt')
         startAllVms = self.ui_eval_param(startAllVms, 'bool', True)
@@ -2490,9 +2527,9 @@ class Vm(ConfigNode):
     
     def ui_command_print_vm_definition(self, outputFile='@pager'):
         """
-        Pretty-print VM JSON in pager or export to outputFile.
+        Pretty-print VM JSON in pager or export to *outputFile*.
         
-        Optionally specify outputFile as a relative or absolute path on the
+        Optionally specify *outputFile* as a relative or absolute path on the
         local system (tab-completion available).
         """
         print()
