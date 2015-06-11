@@ -5,16 +5,15 @@ Do you have an account with ravellosystems.com?
 Do you want to use the command-line to manage your account?
 **If yes, then check this out.**
 
-Proper python packaging not in place yet, so here's some get-started instructions:
+Proper python packaging not in place, but there's a handy setup script that does it all for you
 
 ```
 git clone https://github.com/ryran/ravshello.git ~/ravshello
-git clone https://github.com/ryran/configshell-fb.git ~/configshell-fb
-ln -sv ~/configshell-fb/configshell_fb ~/ravshello/configshell_fb
+cd ~/ravshello
+./RUNME_SETUP_DEPS.sh 
 mkdir ~/bin
 ln -sv ~/ravshello/ravshello.py ~/bin/ravshello
 ln -sv ~/ravshello/rav-notify.py ~/bin/rav-notify
-wget -P ~/ravshello https://raw.githubusercontent.com/ryran/python-sdk/experimental/lib/ravello_sdk.py
 ravshello
 ```
 
