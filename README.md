@@ -8,12 +8,9 @@ Do you want to use the command-line to manage your account?
 Proper python packaging not in place, but there's a handy setup script that does it all for you
 
 ```
-git clone https://github.com/ryran/ravshello.git ~/ravshello
-cd ~/ravshello
+git clone https://github.com/ryran/ravshello.git
+cd ravshello
 ./RUNME_SETUP_DEPS.sh 
-mkdir ~/bin
-ln -sv ~/ravshello/ravshello.py ~/bin/ravshello
-ln -sv ~/ravshello/rav-notify.py ~/bin/rav-notify
 ravshello
 ```
 
