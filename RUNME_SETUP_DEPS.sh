@@ -110,7 +110,7 @@ continue_or_quit() {
 }
 
 # List of Fedora rpm names we need
-reqdRpms="python-pip python-devel PyYAML python-dateutil"
+reqdRpms="python-pip PyYAML python-dateutil"
 [[ ${pyVers[micro]} -lt 9 ]] && reqdRpms+=" pyOpenSSL"
 rpmList=
 for rpm in ${reqdRpms}; do
@@ -171,4 +171,4 @@ git clone https://github.com/ryran/configshell-fb.git rsaw-configshell-fb
 ln -s rsaw-configshell-fb/configshell_fb configshell_fb
 Print 0
 
-Print G "\nDONE WITH DEPENDENCY CHECKING"
+Print G "\nDONE WITH DEPENDENCY RESOLUTION"
