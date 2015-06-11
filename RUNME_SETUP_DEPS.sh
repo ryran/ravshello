@@ -37,6 +37,7 @@ Print() {
         R)  printf "${c[RED]}" ;;
         r)  printf "${c[red]}" ;;
         G)  printf "${c[GREEN]}" ;;
+        g)  printf "${c[green]}" ;;
         B)  printf "${c[BLUE]}" ;;
         b)  printf "${c[blue]}" ;;
         C)  printf "${c[CYAN]}" ;;
@@ -57,8 +58,7 @@ Print() {
 }
 
 usage="Usage: ${app}
-Installs all needed dependencies using dnf/yum (Fedora) & pip
-"
+Installs all needed dependencies using dnf/yum (Fedora) & pip"
 
 # Print help
 if [[ ${1} == -h || ${1} == --help ]]; then
@@ -87,7 +87,8 @@ else
 fi >/dev/null
 
 # Make sure we're in the right place
-if [[ ! -r ./ravshello.py ]]; then
+dir="."
+if [[ ! -r ${dir}/ravshello.py ]]; then
     Print R "Error: ${app} must be run from within the cloned ravshello source tree"
     exit 1
 fi
@@ -111,7 +112,7 @@ continue_or_quit() {
 
 # List of Fedora rpm names we need
 reqdRpms="python-pip PyYAML python-dateutil"
-[[ ${pyVers[micro]} -lt 9 ]] && reqdRpms+=" pyOpenSSL"
+[[ ${pyVers[micro]} -lt 9 ]] && reqdRpms+=" pyOpenSSL python-pyasn1-modules"
 rpmList=
 for rpm in ${reqdRpms}; do
     rpm -q ${rpm} >/dev/null || rpmList+="${rpm} "
@@ -119,7 +120,7 @@ done
 
 if [[ -n ${rpmList} ]]; then
     # Check for missing packages and offer to install them
-    Print C "The following packages are required and must be installed:"
+    Print C "\nThe following packages are required and must be installed"
     Print S "  ${rpmList}\n"
     continue_or_quit yumcheck
     if ! sudo ${yum} install ${rpmList}; then
@@ -127,6 +128,12 @@ if [[ -n ${rpmList} ]]; then
     fi
     Print
 fi
+
+# Check pip version
+Print C "\nUpgrading local-user copy of pip"
+Print b
+pip install --user --upgrade pip
+Print 0
 
 # List of python modules we want to install locally with pip
 # Note that ndg.httpsclient is only needed on python < 2.7.9
@@ -136,23 +143,22 @@ pipNames="pyparsing"
 localLib=~/.local/lib/python2.7/site-packages
 # pyparsing and ndg have tons of dependencies
 # Let's take advantage of what's on the system by doing user install
-Print C "\nUsing pip to install the following modules to ${localLib}:"
-Print S "    ${pipNames}\n"
-sleep 3
+Print C "\nUsing pip to install the following modules to ${localLib}/
+Once installed, modules will be copied to ${dir}/"
+Print S "  ${pipNames}\n"
 Print b
 if ! pip install --user ${pipNames}; then
     continue_or_quit "Warning: pip install failed"
 fi
-cp -a ${localLib}/pyparsing.py .
-[[ ${pyVers[micro]} -lt 9 ]] && cp -a ${localLib}/ndg .
+cp -a ${localLib}/pyparsing.py ${dir}
+[[ ${pyVers[micro]} -lt 9 ]] && cp -a ${localLib}/ndg ${dir}
 Print 0
 
 pipNames="requests"
 # The requests module doesn't have dependencies to speak of AND we want the latest version
 # So let's send it straight to our target dir whether it's already installed or not
-Print C "\nUsing pip to install the following modules directly to '${dir}'/:"
-Print S "    ${pipNames}\n"
-sleep 3
+Print C "\nUsing pip to install the following modules directly to ${dir}/"
+Print S "  ${pipNames}\n"
 Print b
 if pip install -t . ${pipNames}; then
     Print 0
@@ -160,15 +166,26 @@ else
     continue_or_quit "Warning: pip install failed"
 fi
 
-Print C "\nDownloading rsaw's stable fork of ravello_sdk"
-Print b
-curl -o ravello_sdk.py https://raw.githubusercontent.com/ryran/python-sdk/ravshello-stable/lib/ravello_sdk.py
-Print 0
+if [[ -f ravello_sdk.py ]]; then
+    Print g "\nAlready present: './ravello_sdk.py'"
+else
+    Print C "\nDownloading rsaw's stable fork of ravello_sdk"
+    Print b
+    curl -o ravello_sdk.py https://raw.githubusercontent.com/ryran/python-sdk/ravshello-stable/lib/ravello_sdk.py
+    Print 0
+fi
 
-Print C "\nDownloading rsaw's stable + modified fork of configshell_fb"
-Print b
-git clone https://github.com/ryran/configshell-fb.git rsaw-configshell-fb
-ln -s rsaw-configshell-fb/configshell_fb configshell_fb
-Print 0
+if [[ -d configshell_fb ]]; then
+    Print g "\nAlready present: './configshell_fb/'"
+else
+    Print C "\nDownloading rsaw's stable + modified fork of configshell_fb"
+    Print b
+    git clone https://github.com/ryran/configshell-fb.git rsaw-configshell-fb
+    ln -s rsaw-configshell-fb/configshell_fb configshell_fb
+    Print 0
+fi
 
-Print G "\nDONE WITH DEPENDENCY RESOLUTION"
+Print G "\nDONE WITH DEPENDENCY RESOLUTION!
+Try executing: ${dir}/ravshello.py
+"
+    
