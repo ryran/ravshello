@@ -4,7 +4,7 @@ app=${0##*/}
 
 # Don't run as root
 if [[ ${EUID} == 0 ]]; then
-    echo "Don't trust this script and DON'T run it as root"
+    echo "DON'T run this script as root"
     echo "Aborting"
     exit 1
 fi
@@ -87,11 +87,18 @@ else
 fi >/dev/null
 
 # Make sure we're in the right place
-dir="."
-if [[ ! -r ${dir}/ravshello.py ]]; then
+if [[ ! -r ./ravshello.py ]]; then
     Print R "Error: ${app} must be run from within the cloned ravshello source tree"
     exit 1
 fi
+
+# Where to place the runtime version
+dir=~/.local/share/ravshello
+if [[ -d ${dir} ]]; then
+    Print o "Notice: application dir (${dir}) already exists; wiping it"
+    rm -r ${dir}
+fi
+mkdir -p ${dir}
 
 continue_or_quit() {
     if [[ ${1} == yumcheck ]]; then
@@ -160,32 +167,36 @@ pipNames="requests"
 Print C "\nUsing pip to install the following modules directly to ${dir}/"
 Print S "  ${pipNames}\n"
 Print b
-if pip install -t . ${pipNames}; then
+if pip install -t ${dir} ${pipNames}; then
     Print 0
 else
     continue_or_quit "Warning: pip install failed"
 fi
 
-if [[ -f ravello_sdk.py ]]; then
-    Print g "\nAlready present: './ravello_sdk.py'"
-else
-    Print C "\nDownloading rsaw's stable fork of ravello_sdk"
-    Print b
-    curl -o ravello_sdk.py https://raw.githubusercontent.com/ryran/python-sdk/ravshello-stable/lib/ravello_sdk.py
-    Print 0
-fi
+Print C "\nDownloading rsaw's stable fork of ravello_sdk"
+Print b
+curl -o ${dir}/ravello_sdk.py https://raw.githubusercontent.com/ryran/python-sdk/ravshello-stable/lib/ravello_sdk.py
+Print 0
 
-if [[ -d configshell_fb ]]; then
-    Print g "\nAlready present: './configshell_fb/'"
-else
-    Print C "\nDownloading rsaw's stable + modified fork of configshell_fb"
-    Print b
-    git clone https://github.com/ryran/configshell-fb.git rsaw-configshell-fb
-    ln -s rsaw-configshell-fb/configshell_fb configshell_fb
-    Print 0
-fi
+Print C "\nDownloading rsaw's stable + modified fork of configshell_fb"
+Print b
+git clone https://github.com/ryran/configshell-fb.git ${dir}/rsaw-configshell-fb
+ln -s rsaw-configshell-fb/configshell_fb ${dir}/configshell_fb
+Print 0
 
-Print G "\nDONE WITH DEPENDENCY RESOLUTION!
-Try executing: ${dir}/ravshello.py
-"
+Print C "\nCopying source from CWD"
+cp -a * ${dir}
+
+Print G "\nDONE WITH DEPENDENCY RESOLUTION!\n"
+
+Print C "Creating an executable 'ravshello' symlink in ~/bin might be nice"
+read -ep "Add 'ravshello' to PATH? [Y|n] "
+if [[ ${REPLY} == n ]]; then
+    Print n "OK, well you can execute ${dir}/ravshello.py directly then"
+else
+    mkdir -p ~/bin
+    ln -svf ${dir}/ravshello.py ~/bin/ravshello
+    Print n "Done -- try executing: ravshello"
+fi
     
+Print P "\nNote: any time you pull updates to the ravshello git repo, you should re-run this script"
