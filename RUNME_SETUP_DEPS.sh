@@ -96,7 +96,7 @@ fi
 dir=~/.local/share/ravshello
 if [[ -d ${dir} ]]; then
     Print o "Notice: application dir (${dir}) already exists; wiping it"
-    rm -r ${dir}
+    rm -rf ${dir}
 fi
 mkdir -p ${dir}
 
