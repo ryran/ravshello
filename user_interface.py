@@ -130,7 +130,7 @@ def main(opt, client):
     elif is_admin():
         shell.run_interactive(exit_on_error=rOpt.enableDebugging)
     else:
-        # What to do when not admin 
+        # What to do when not admin
         if rOpt.cmdlineArgs or rOpt.scriptFile:
             print(c.red("Sorry! Only admins are allowed to use ravshello non-interactively\n"))
             return
@@ -469,7 +469,7 @@ class Monitoring(ConfigNode):
         By default notificationLevel is set to None which means all levels are
         shown. DEV NOTE: There might be other levels; I've only seen those 3.
         
-        startTime and endTime must be provided in UNIX time format, e.g., 
+        startTime and endTime must be provided in UNIX time format, e.g.,
         specifying 1375367161 would result in a date of Aug 1 14:26:01 UTC 2013.
         Register an RFE if you're interested in specifying it differently (e.g.,
         perhaps an interactive prompt).
@@ -581,7 +581,7 @@ class Billing(ConfigNode):
             raise
         
         if outputFile == '@pager':
-            pager("Full details of charges incurred for all apps since beginning of the month\n" + 
+            pager("Full details of charges incurred for all apps since beginning of the month\n" +
                   ui.prettify_json(b))
         else:
             try:
@@ -949,7 +949,7 @@ class Billing(ConfigNode):
                     product))
         out.append("    --------")
         out.append(
-            "    "  + 
+            "    "  +
             c.REVERSE("${:8.2f}\tMonthly charges grand total".format(prodGrandTotal)))
         out.append("")
         return "\n".join(out)
@@ -1233,7 +1233,7 @@ class Blueprints(ConfigNode):
             try:
                 rClient.delete_application(newApp['id'])
             except:
-                print("\nNotice: Unable to delete temporary unpublished application '{}'\n" 
+                print("\nNotice: Unable to delete temporary unpublished application '{}'\n"
                       .format(appName))
         
         # Set default bp name from bp json or filename
@@ -1290,7 +1290,7 @@ class Blueprints(ConfigNode):
         
         # Delete temp app
         _delete_temporary_app(newApp['id'], appName)
-        # Add new bp to directory tree                                                                       
+        # Add new bp to directory tree
         Bp("%s" % newBp['name'], self, newBp['id'], newBp['creationTime'])
         print()
     
@@ -1448,11 +1448,11 @@ class Bp(ConfigNode):
         Print details about available publish locations for a blueprint.
         """
         print()
-        pager("Blueprint available publish locations for '{}'\n".format(self.bpName) + 
+        pager("Blueprint available publish locations for '{}'\n".format(self.bpName) +
               ui.prettify_json(rClient.get_blueprint_publish_locations(self.bpId)))
     
     def print_bp_definition(self):
-        pager("JSON definition for BLUEPRINT '{}'\n".format(self.bpName) + 
+        pager("JSON definition for BLUEPRINT '{}'\n".format(self.bpName) +
               ui.prettify_json(rClient.get_blueprint(self.bpId)))
     
     def ui_command_print_bp_definition(self, outputFile='@pager'):
@@ -1726,7 +1726,7 @@ class Applications(ConfigNode):
         appName = appnamePrefix + appName
         
         # Ensure there's not already an app with that name
-        appName = ravello_sdk.new_name(rClient.get_applications(), appName + '_')            
+        appName = ravello_sdk.new_name(rClient.get_applications(), appName + '_')
         
         if desc == '@prompt':
             # Prompt for description
@@ -1993,7 +1993,7 @@ class App(ConfigNode):
         if desiredState:
             print("Will stop polling when all VMs reach '{}' state"
                   .format(desiredState))
-        print("(Cancel status loop early & return to cmdline with " + 
+        print("(Cancel status loop early & return to cmdline with " +
               c.BOLD("Ctrl-c") + ")\n")
         loopCount = 0
         while loopCount <= maxLoops:
@@ -2152,7 +2152,7 @@ class App(ConfigNode):
         self.extend_app_autostop(minutes)
         print()
     
-    def ui_complete_extend_app_autostop(self, parameters, text, current_param):        
+    def ui_complete_extend_app_autostop(self, parameters, text, current_param):
         if current_param == 'minutes':
             if is_admin():
                 L = ['-1', '5', '30', '60', '120', '240', '480', '720', '1440']
@@ -2168,7 +2168,7 @@ class App(ConfigNode):
             return completions
     
     def print_app_definition(self):
-        pager("JSON definition for APPLICATION '{}'\n".format(self.appName) + 
+        pager("JSON definition for APPLICATION '{}'\n".format(self.appName) +
               ui.prettify_json(rClient.get_application(self.appId)))
     
     def ui_command_print_app_definition(self, outputFile='@pager'):
@@ -2389,7 +2389,6 @@ class App(ConfigNode):
             print("\nProblem stopping application!\n")
         print(c.yellow("\nApplication now stopping"))
         rCache.purge_app_cache(self.appId)
-        self.loop_query_app_status(desiredState='STOPPED', intervalSec=15, totalMin=10)
     
     def ui_command_restart_app(self):
         """
@@ -2420,7 +2419,7 @@ class App(ConfigNode):
                 imageName = c.replace_bad_chars_with_underscores(a)
             applicationId = appDetails['design']['vms'][i]['applicationId']
             vmId = appDetails['design']['vms'][i]['id']
-            imageReq = {"applicationId": applicationId, "blueprint": "false", "vmId": vmId, "offline": "true", "imageName": imageName} 
+            imageReq = {"applicationId": applicationId, "blueprint": "false", "vmId": vmId, "offline": "true", "imageName": imageName}
             try:
                 newImg = rClient.create_images(imageReq)
             except:
@@ -2470,7 +2469,7 @@ class Vms(ConfigNode):
                 else:
                     status += ", auto-stop disabled"
             else:
-                hazHappy = None            
+                hazHappy = None
             if totalErrorVms > 0:
                 status += "({} VMs in error state!)".format(totalErrorVms)
                 hazHappy = False
