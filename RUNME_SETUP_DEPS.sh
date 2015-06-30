@@ -10,10 +10,17 @@ if [[ ${EUID} == 0 ]]; then
 fi
 
 # Require bash v4
-if [[ $BASH_VERSINFO -lt 4 ]]; then
+if [[ ${BASH_VERSINFO} -lt 4 ]]; then
     echo "This script requires at least bash v4.0"
     echo "Aborting"
     exit 9
+fi
+
+if [[ ${1} == --noshortcut ]]; then
+    shift
+    createShortcut=
+else
+    createShortcut=1
 fi
 
 # Set colors
@@ -57,8 +64,9 @@ Print() {
     fi
 }
 
-usage="Usage: ${app}
-Installs all needed dependencies using dnf/yum (Fedora) & pip"
+usage="Usage: ${app} [--noshortcut]
+Installs all needed dependencies using dnf/yum (Fedora) & pip
+Optionally creates a shortcut of ~/bin/ravshello when finished"
 
 # Print help
 if [[ ${1} == -h || ${1} == --help ]]; then
@@ -118,8 +126,8 @@ continue_or_quit() {
 }
 
 # List of Fedora rpm names we need
-reqdRpms="python-pip PyYAML python-dateutil"
-[[ ${pyVers[micro]} -lt 9 ]] && reqdRpms+=" pyOpenSSL python-pyasn1-modules"
+reqdRpms="python-pip PyYAML python-dateutil pyparsing"
+[[ ${pyVers[micro]} -lt 9 ]] && reqdRpms+=" pyOpenSSL python-pyasn1-modules python-ndg_httpsclient"
 rpmList=
 for rpm in ${reqdRpms}; do
     rpm -q ${rpm} >/dev/null || rpmList+="${rpm} "
@@ -127,7 +135,7 @@ done
 
 if [[ -n ${rpmList} ]]; then
     # Check for missing packages and offer to install them
-    Print C "\nThe following packages are required and must be installed"
+    Print C "\nThe following packages are required and must be installed\nNote for RHEL7: EPEL and optional channels needed"
     Print S "  ${rpmList}\n"
     continue_or_quit yumcheck
     if ! sudo ${yum} install ${rpmList}; then
@@ -135,31 +143,6 @@ if [[ -n ${rpmList} ]]; then
     fi
     Print
 fi
-
-# Check pip version
-Print C "\nUpgrading local-user copy of pip"
-Print b
-pip install --user --upgrade pip
-Print 0
-
-# List of python modules we want to install locally with pip
-# Note that ndg.httpsclient is only needed on python < 2.7.9
-pipNames="pyparsing"
-[[ ${pyVers[micro]} -lt 9 ]] &&  pipNames+=" ndg-httpsclient"
-
-localLib=~/.local/lib/python2.7/site-packages
-# pyparsing and ndg have tons of dependencies
-# Let's take advantage of what's on the system by doing user install
-Print C "\nUsing pip to install the following modules to ${localLib}/
-Once installed, modules will be copied to ${dir}/"
-Print S "  ${pipNames}\n"
-Print b
-if ! pip install --user ${pipNames}; then
-    continue_or_quit "Warning: pip install failed"
-fi
-cp -a ${localLib}/pyparsing.py ${dir}
-[[ ${pyVers[micro]} -lt 9 ]] && cp -a ${localLib}/ndg ${dir}
-Print 0
 
 pipNames="requests"
 # The requests module doesn't have dependencies to speak of AND we want the latest version
@@ -189,14 +172,13 @@ cp -a * ${dir}
 
 Print G "\nDONE WITH DEPENDENCY RESOLUTION!\n"
 
-Print C "Creating an executable 'ravshello' symlink in ~/bin might be nice"
-read -ep "Add 'ravshello' to PATH? [Y|n] "
-if [[ ${REPLY} == n ]]; then
-    Print n "OK, well you can execute ${dir}/ravshello.py directly then"
-else
+if [[ -n ${createShortcut} ]]; then
+    Print C "Creating an executable '~/bin/ravshello' symlink"
     mkdir -p ~/bin
     ln -svf ${dir}/ravshello.py ~/bin/ravshello
-    Print n "Done -- try executing: ravshello"
+else
+    Print C "Skipping creation of '~/bin/ravshello' symlink"
+    Print n "You can execute ${dir}/ravshello.py directly"
 fi
     
 Print P "\nNote: any time you pull updates to the ravshello git repo, you should re-run this script"
