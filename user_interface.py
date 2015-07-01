@@ -2387,7 +2387,7 @@ class App(ConfigNode):
             rClient.stop_application(self.appId)
         except:
             print("\nProblem stopping application!\n")
-        print(c.yellow("\nApplication now stopping"))
+        print(c.yellow("\nApplication now stopping\n"))
         rCache.purge_app_cache(self.appId)
     
     def ui_command_restart_app(self):
