@@ -152,7 +152,7 @@ def main(opt, client):
         print(" │ Your first time?")
         print(" │   - First: use `{}` command".format(c.BOLD('cd apps')))
         print(" │   - Next: press TAB-TAB to see available commands")
-        print(" │   - Next: use `{}` command to get started".format(c.BOLD('newapp')))
+        print(" │   - Next: use `{}` command to get started".format(c.BOLD('new')))
         print(" │   - Optional: `{}` into new app directory and press TAB-TAB to see commands".format(c.BOLD('cd')))
         print(" │   - Optional: use `{}` command to add an hour to the timer".format(c.BOLD('extend_autostop')))
         print(" └──────────────────────────────────────────────────────────────────────────────\n")
@@ -1639,7 +1639,7 @@ class Applications(ConfigNode):
         else:
             return completions
     
-    def ui_command_newapp(self, blueprint='@prompt', name='@prompt',
+    def ui_command_new(self, blueprint='@prompt', name='@prompt',
             desc='@prompt', publish='true', region='@prompt',
             startAllVms='true'):
         """
@@ -1769,7 +1769,7 @@ class Applications(ConfigNode):
         else:
             print()
     
-    def ui_complete_newapp(self, parameters, text, current_param):
+    def ui_complete_new(self, parameters, text, current_param):
         if current_param == 'blueprint':
             allowedBlueprints = ['@prompt']
             blueprints = rClient.get_blueprints()
@@ -2622,7 +2622,7 @@ class Vm(ConfigNode):
         print(c.yellow("\nVM now stopping\n"))
         rCache.purge_app_cache(self.appId)
     
-    def ui_command_kill(self):
+    def ui_command_poweroff(self):
         """
         Cut the power to a VM, hopefully forcing it off immediately.
         
