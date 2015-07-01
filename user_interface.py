@@ -2015,10 +2015,9 @@ class App(ConfigNode):
         print(c.green("All VMs reached '{}' state!\n".format(desiredState)))
         if desiredState == 'STARTED':
             c.verbose(
-                "SSH NOTE: STARTED does not mean the OS of each machine has "
-                "finished booting\nVNC NOTE: URLs expire within a minute if not "
-                "used; refresh them with either\n          a `query_status` "
-                "or `loop_query_status` command\n")
+                "SSH NOTE: STARTED does not mean the OS of each machine has finished booting\n"
+                "VNC NOTE: URLs expire within a minute if not used; refresh them with either\n"
+                "          a `query_status` or `loop_query_status` command\n")
     
     def ui_command_query_status(self):
         """
@@ -2387,7 +2386,7 @@ class App(ConfigNode):
             rClient.stop_application(self.appId)
         except:
             print("\nProblem stopping application!\n")
-        print(c.yellow("\nApplication now stopping"))
+        print(c.yellow("\nApplication now stopping\n"))
         rCache.purge_app_cache(self.appId)
     
     def ui_command_restart(self):
@@ -2560,7 +2559,7 @@ class Vm(ConfigNode):
         """
         Start a stopped VM.
         
-        start, Stop, & restart all rely on the guest OS correctly
+        The start, Stop, & restart commands all rely on the guest OS correctly
         handling ACPI events. If ACPI is disabled in the kernel (acpi=off) or
         the appropriate process isn't listening (RHEL6: acpid / RHEL7: systemd),
         the guest will gleefully ignore the request.
@@ -2605,7 +2604,7 @@ class Vm(ConfigNode):
         """
         Gracefully stop a running VM.
         
-        start, Stop, & restart all rely on the guest OS correctly
+        The start, Stop, & restart commands all rely on the guest OS correctly
         handling ACPI events. If ACPI is disabled in the kernel (acpi=off) or
         the appropriate process isn't listening (RHEL6: acpid / RHEL7: systemd),
         the guest will gleefully ignore the request.
@@ -2646,7 +2645,7 @@ class Vm(ConfigNode):
         """
         Gracefully restart a running VM.
         
-        start, Stop, & restart all rely on the guest OS correctly
+        The start, Stop, & restart commands all rely on the guest OS correctly
         handling ACPI events. If ACPI is disabled in the kernel (acpi=off) or
         the appropriate process isn't listening (RHEL6: acpid / RHEL7: systemd),
         the guest will gleefully ignore the request.
