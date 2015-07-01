@@ -146,15 +146,15 @@ def main(opt, client):
         print(c.BOLD("Instructions:"))
         print(" ┐")
         print(" │ NAVIGATE: Use `{}` and `{}` with tab-completion".format(c.BOLD('cd'), c.BOLD('ls')))
-        print(" │ COMMANDS: Use tab-completion to see commands specific to each dir")
+        print(" │ COMMANDS: Use tab-completion to see commands specific to each directory")
         print(" │ GET HELP: Use `{}`".format(c.BOLD('help')))
         print(" │")
         print(" │ Your first time?")
         print(" │   - First: use `{}` command".format(c.BOLD('cd apps')))
         print(" │   - Next: press TAB-TAB to see available commands")
-        print(" │   - Next: use `{}` command to get started".format(c.BOLD('create_app')))
+        print(" │   - Next: use `{}` command to get started".format(c.BOLD('newapp')))
         print(" │   - Optional: `{}` into new app directory and press TAB-TAB to see commands".format(c.BOLD('cd')))
-        print(" │   - Optional: use `{}` command to add an hour to the timer".format(c.BOLD('extend_app_autostop')))
+        print(" │   - Optional: use `{}` command to add an hour to the timer".format(c.BOLD('extend_autostop')))
         print(" └──────────────────────────────────────────────────────────────────────────────\n")
         shell.run_interactive(exit_on_error=rOpt.enableDebugging)
 
@@ -199,7 +199,7 @@ class Events(ConfigNode):
         if self.isPopulated:
             return ("{} possible events".format(self.numberOfEvents), None)
         else:
-            return ("To populate, run command: refresh_events", False)
+            return ("To populate, run: refresh", False)
         
     def refresh(self):
         self._children = set([])
@@ -210,7 +210,7 @@ class Events(ConfigNode):
             self.numberOfEvents += 1
         self.isPopulated = True
     
-    def ui_command_refresh_events(self):
+    def ui_command_refresh(self):
         """
         Poll Ravello for list of event names and registered userAlerts.
         
@@ -233,7 +233,7 @@ class Events(ConfigNode):
         local system; otherwise output will be piped to pager.
         
         Alerts can be registered for any of the returned event names with the
-        register_alert command.
+        register command.
         """
         print()
         outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
@@ -275,7 +275,7 @@ class Events(ConfigNode):
         Optionally specify *outputFile* as a relative or absolute path on the
         local system.
         
-        Create alerts with the register_alert command.
+        Create alerts with the register command.
         """
         print()
         outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
@@ -331,7 +331,7 @@ class Event(ConfigNode):
         else:
             return ("No alerts", False)
     
-    def ui_command_register_alert(self, userEmail='@moi'):
+    def ui_command_register(self, userEmail='@moi'):
         """
         Register currently logged-in Ravello user to receive email on event.
         
@@ -364,7 +364,7 @@ class Event(ConfigNode):
         rCache.purge_alert_cache()
         self.refresh()
     
-    def ui_complete_register_alert(self, parameters, text, current_param):
+    def ui_complete_register(self, parameters, text, current_param):
         if current_param == 'userEmail':
             rCache.get_user()
             L = []
@@ -396,7 +396,7 @@ class UserAlert(ConfigNode):
     #~ def summary(self):
         #~ return (get_user(self.userId)['email'], None)
     
-    def ui_command_unregister_alert(self):
+    def ui_command_unregister(self):
         """
         Delete a previously-registered alert.
         """
@@ -461,7 +461,7 @@ class Monitoring(ConfigNode):
         newest matches at the top.
         
         To see details about a specific application only, determine appId first,
-        e.g., with print_app_definition command.
+        e.g., with print_def command.
         
         To remove limit on number of results, set maxResults=0.
         
@@ -969,7 +969,7 @@ class Users(ConfigNode):
         if self.isPopulated:
             return ("{} admins, {} users".format(self.numberOfAdmins, self.numberOfUsers - self.numberOfAdmins), None)
         else:
-            return ("To populate, run command: refresh_users", False)
+            return ("To populate, run: refresh", False)
     
     def refresh(self):
         self._children = set([])
@@ -984,7 +984,7 @@ class Users(ConfigNode):
                     self.numberOfAdmins += 1
         self.isPopulated = True
     
-    def ui_command_refresh_users(self):
+    def ui_command_refresh(self):
         """
         Poll Ravello for user list.
         
@@ -998,7 +998,7 @@ class Users(ConfigNode):
         self.refresh()
         print(c.green("DONE!\n"))
     
-    def ui_command_invite_new_user(self):
+    def ui_command_invite(self):
         """
         Create new user account via invitation.
         
@@ -1038,7 +1038,7 @@ class User(ConfigNode):
             r = None
         return (user['email'], r)
     
-    def ui_command_get_user_info(self):
+    def ui_command_get_info(self):
         """
         Pretty-print user details.
         """
@@ -1046,7 +1046,7 @@ class User(ConfigNode):
         print(ui.prettify_json(rCache.get_user(self.userId)))
         print()
     
-    def ui_command_update_user_info(self):
+    def ui_command_update_info(self):
         """
         Update user first/last name and admin status.
         """
@@ -1090,7 +1090,7 @@ class User(ConfigNode):
             self.parent.numberOfAdmins += 1
         print(c.green("Updated user info\n"))
     
-    def ui_command_delete_user(self):
+    def ui_command_delete(self):
         """
         Delete a user.
         
@@ -1123,7 +1123,7 @@ class User(ConfigNode):
             print("Leaving user intact (probably a good choice)\n")
     
     
-    def ui_command_change_user_password(self):
+    def ui_command_change_password(self):
         """
         Change a user's password.
         
@@ -1157,7 +1157,7 @@ class Blueprints(ConfigNode):
         if self.isPopulated:
             return ("{} blueprints".format(self.numberOfBps), None)
         else:
-            return ("To populate, run command: refresh_blueprints", False)
+            return ("To populate, run: refresh", False)
     
     def refresh(self):
         self._children = set([])
@@ -1167,7 +1167,7 @@ class Blueprints(ConfigNode):
             self.numberOfBps += 1
         self.isPopulated = True
     
-    def ui_command_refresh_blueprints(self):
+    def ui_command_refresh(self):
         """
         Poll Ravello for blueprint list.
         
@@ -1181,7 +1181,7 @@ class Blueprints(ConfigNode):
         self.refresh()
         print(c.green("DONE!\n"))
     
-    def ui_command_backup_all_bps(self, bpDir='@home'):
+    def ui_command_backup_all(self, bpDir='@home'):
         """
         Export each & every blueprint to a JSON file.
         
@@ -1219,7 +1219,7 @@ class Blueprints(ConfigNode):
             print(c.green("Exported bp to file: '{}'".format(f)))
         print()
     
-    def ui_complete_backup_all_bps(self, parameters, text, current_param):
+    def ui_complete_backup_all(self, parameters, text, current_param):
         if current_param != 'bpDir':
             return []
         completions = complete_path(text, S_ISDIR)
@@ -1294,7 +1294,7 @@ class Blueprints(ConfigNode):
         Bp("%s" % newBp['name'], self, newBp['id'], newBp['creationTime'])
         print()
     
-    def ui_command_create_bp_from_file(self, inputFile='@prompt',
+    def ui_command_import_from_file(self, inputFile='@prompt',
             name='@prompt', desc='@prompt'):
         """
         Create a blurprint from JSON file in <CFGDIR>/blueprints.
@@ -1305,9 +1305,9 @@ class Blueprints(ConfigNode):
         cmdline option '--cfgdir'.
         
         This command is only useful after running one of the following:
-            - backup_all_bps
-            - backup_bp
-            - print_bp_definition outputFile=PATH
+            - backup_all
+            - backup
+            - print_def outputFile=PATH
         
         Optionally specify *name* and/or *desc* on the command-line to avoid
         prompting (both default to '@prompt' and both can be set to '@auto'
@@ -1327,7 +1327,7 @@ class Blueprints(ConfigNode):
                 print(c.red("There are not any blueprint files in your local cache ({})!\n"
                             .format(path.join(rOpt.userCfgDir, 'blueprints'))))
                 print("(They would need to have been created by the `{}`, `{}`, or `{}` commands)\n"
-                      .format(c.BOLD('backup_all_bps'), c.BOLD('backup_bp'), c.BOLD('print_bp_definition')))
+                      .format(c.BOLD('backup_all'), c.BOLD('backup'), c.BOLD('print_def')))
                 return
             # Enumerate through list of files
             print(c.BOLD("Blueprint json definitions available in {}:"
@@ -1349,7 +1349,7 @@ class Blueprints(ConfigNode):
         # Make the magic happen
         self.create_bp_from_json_obj(bpDefinition, inputFile, name, desc)
     
-    def ui_complete_create_bp_from_file(self, parameters, text, current_param):
+    def ui_complete_import_from_file(self, parameters, text, current_param):
         if current_param == 'inputFile':
             completions = complete_path(text, S_ISREG)
             if len(completions) == 1 and not completions[0].endswith('/'):
@@ -1395,7 +1395,7 @@ class Bp(ConfigNode):
             created = self.creationTime.strftime('%Y/%m/%d')
         return ("Created: {}".format(created), None)
     
-    def delete_bp(self):
+    def delete(self):
         try:
             rClient.delete_blueprint(self.bpId)
         except:
@@ -1404,7 +1404,7 @@ class Bp(ConfigNode):
         print(c.green("Deleted blueprint {}\n".format(self.bpName)))
         self.parent.remove_child(self)
     
-    def ui_command_delete_bp(self, noconfirm='false', nobackup='false'):
+    def ui_command_delete(self, noconfirm='false', nobackup='false'):
         """
         Delete a blueprint.
         
@@ -1425,14 +1425,14 @@ class Bp(ConfigNode):
         if noconfirm or response == 'y':
             if not nobackup:
                 print("Backing up blueprint definition to local file before deleting . . .")
-                self.ui_command_backup_bp()
+                self.ui_command_backup()
                 print("Blueprint can be recreated from file later with {} command\n"
-                      .format(c.BOLD("create_bp_from_file")))
-            self.delete_bp()
+                      .format(c.BOLD("import_from_file")))
+            self.delete()
         else:
             print("Leaving bp intact (probably a good choice)\n")
     
-    def ui_complete_delete_bp(self, parameters, text, current_param):
+    def ui_complete_delete(self, parameters, text, current_param):
         if current_param in ['noconfirm', 'nobackup']:
             completions = [a for a in ['false', 'true']
                            if a.startswith(text)]
@@ -1443,7 +1443,7 @@ class Bp(ConfigNode):
         else:
             return completions
     
-    def ui_command_find_bp_publish_locations(self):
+    def ui_command_find_pub_locations(self):
         """
         Print details about available publish locations for a blueprint.
         """
@@ -1451,11 +1451,11 @@ class Bp(ConfigNode):
         pager("Blueprint available publish locations for '{}'\n".format(self.bpName) +
               ui.prettify_json(rClient.get_blueprint_publish_locations(self.bpId)))
     
-    def print_bp_definition(self):
+    def print_def(self):
         pager("JSON definition for BLUEPRINT '{}'\n".format(self.bpName) +
               ui.prettify_json(rClient.get_blueprint(self.bpId)))
     
-    def ui_command_print_bp_definition(self, outputFile='@pager'):
+    def ui_command_print_def(self, outputFile='@pager'):
         """
         Pretty-print blueprint JSON in pager or export to outputFile.
         
@@ -1465,7 +1465,7 @@ class Bp(ConfigNode):
         print()
         outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
         if outputFile == '@pager':
-            self.print_bp_definition()
+            self.print_def()
         else:
             try:
                 ui.prepare_file_for_writing(outputFile)
@@ -1480,7 +1480,7 @@ class Bp(ConfigNode):
                 return
             print(c.green("Exported bp definition to file: '{}'\n".format(outputFile)))
     
-    def ui_complete_print_bp_definition(self, parameters, text, current_param):
+    def ui_complete_print_def(self, parameters, text, current_param):
         if current_param != 'outputFile':
             return []
         completions = complete_path(text, S_ISREG)
@@ -1488,14 +1488,14 @@ class Bp(ConfigNode):
             completions = [completions[0] + ' ']
         return completions
     
-    def ui_command_backup_bp(self):
+    def ui_command_backup(self):
         """
         Export blueprint definition to a JSON file in <CFGDIR>/blueprints.
         
         File names are determined automatically from the blueprint name (plus an
         extension of ".json"). Existing files are overwritten.
         
-        To save to a specific path, use print_bp_definition command.
+        To save to a specific path, use print_def command.
         """
         print()
         d = path.join(rOpt.userCfgDir, 'blueprints')
@@ -1510,7 +1510,7 @@ class Bp(ConfigNode):
             raise
         print(c.green("Exported bp to file: '{}'\n".format(f)))
     
-    def ui_command_make_bp_copy(self, name='@prompt', desc='@prompt'):
+    def ui_command_copy(self, name='@prompt', desc='@prompt'):
         """
         Create a copy of an existing blueprint.
         
@@ -1525,7 +1525,7 @@ class Bp(ConfigNode):
         # Make the magic happen
         self.parent.create_bp_from_json_obj(bpDefinition, name=name, desc=desc)
     
-    def ui_complete_make_bp_copy(self, parameters, text, current_param):
+    def ui_complete_copy(self, parameters, text, current_param):
         if current_param == 'name':
             L = ['@prompt', '@auto']
             for bp in rClient.get_blueprints():
@@ -1576,7 +1576,7 @@ class Applications(ConfigNode):
         return ("{} active VMs, {} of {} applications published"
                 .format(totalActiveVms, self.numberOfPublishedApps, self.numberOfApps), None)
     
-    def ui_command_refresh_apps(self):
+    def ui_command_refresh(self):
         """
         Poll Ravello for application list, the same as on initial startup.
         
@@ -1590,7 +1590,7 @@ class Applications(ConfigNode):
         self.refresh()
         print(c.green("DONE!\n"))
     
-    def ui_command_DELETE_ALL_APPS(self, noconfirm='false'):
+    def ui_command_DELETE_ALL(self, noconfirm='false'):
         """
         Delete all user applications.
         
@@ -1600,7 +1600,7 @@ class Applications(ConfigNode):
         print()
         if is_admin() and rOpt.showAllApps:
             print(c.red("NOPE!\n"
-                        "The delete-all-apps cmd doesn't work when logged in as admin with visibility to all apps\n"))
+                        "The DELETE_ALL cmd doesn't work when logged in as admin with visibility to all apps\n"))
             print("Log out and use -a/--admin instead of -A/--allapps\n"
                   "That will allow you to quickly delete all apps that include your kerberos in their name\n")
             return
@@ -1628,7 +1628,7 @@ class Applications(ConfigNode):
             print("Whew! That was close! Leaving your apps alone sounds like a good idea")
         print()
     
-    def ui_complete_DELETE_ALL_APPS(self, parameters, text, current_param):
+    def ui_complete_DELETE_ALL(self, parameters, text, current_param):
         if current_param == 'noconfirm':
             completions = [a for a in ['false', 'true']
                            if a.startswith(text)]
@@ -1639,7 +1639,7 @@ class Applications(ConfigNode):
         else:
             return completions
     
-    def ui_command_create_app(self, blueprint='@prompt', name='@prompt',
+    def ui_command_newapp(self, blueprint='@prompt', name='@prompt',
             desc='@prompt', publish='true', region='@prompt',
             startAllVms='true'):
         """
@@ -1651,7 +1651,7 @@ class Applications(ConfigNode):
         multiple arguments (i.e., you cannot pass multiple words with spaces,
         even if you use quotes).
         
-        If run with publish=false, the publish_app command can be run
+        If run with publish=false, the publish command can be run
         later from the app-specific context (/apps/APPNAME/).
         """
         blueprint = self.ui_eval_param(blueprint, 'string', '@prompt')
@@ -1765,11 +1765,11 @@ class Applications(ConfigNode):
         App("%s" % appName, self, newApp['id'])
         
         if publish:
-            self.get_child(appName).ui_command_publish_app(region, startAllVms)
+            self.get_child(appName).ui_command_publish(region, startAllVms)
         else:
             print()
     
-    def ui_complete_create_app(self, parameters, text, current_param):
+    def ui_complete_newapp(self, parameters, text, current_param):
         if current_param == 'blueprint':
             allowedBlueprints = ['@prompt']
             blueprints = rClient.get_blueprints()
@@ -1877,7 +1877,7 @@ class App(ConfigNode):
     def print_message_app_not_published(self):
         print(c.red("Application has not been published yet!\n"))
         print("To publish application, run command:")
-        print(c.BOLD("    /apps/{}/ publish_app\n".format(self.appName)))
+        print(c.BOLD("    /apps/{}/ publish\n".format(self.appName)))
     
     def confirm_app_is_published(self):
         rCache.update_app_cache(self.appId)
@@ -1886,7 +1886,7 @@ class App(ConfigNode):
             return False
         return True
     
-    def ui_command_update_app_note(self, note='@prompt'):
+    def ui_command_update_note(self, note='@prompt'):
         """
         Embed an arbitrary string of text in the application description.
         
@@ -1949,10 +1949,10 @@ class App(ConfigNode):
             print("Notes can be seen with the {} command\n"
                   .format(c.BOLD("ls")))
     
-    def ui_command_loop_query_app_status(self, desiredState=None,
+    def ui_command_loop_query_status(self, desiredState=None,
             intervalSec=20, totalMin=30):
         """
-        Execute query_app_status command on a loop.
+        Execute query_status command on a loop.
         
         Optionally specify *desiredState* -- loop ends if all VMs reach this
         state (choose between 'STARTED' & 'STOPPED').
@@ -1972,9 +1972,9 @@ class App(ConfigNode):
             elif totalMin < 1:
                 print(c.red("\nUsing minimum learner watch-time of 1 min"))
                 totalMin = 1
-        self.loop_query_app_status(desiredState, intervalSec, totalMin)
+        self.loop_query_status(desiredState, intervalSec, totalMin)
     
-    def ui_complete_loop_query_app_status(self, parameters, text, current_param):
+    def ui_complete_loop_query_status(self, parameters, text, current_param):
         if current_param == 'desiredState':
             completions = [a for a in ['STARTED', 'STOPPED']
                            if a.startswith(text)]
@@ -1985,7 +1985,7 @@ class App(ConfigNode):
         else:
             return completions
     
-    def loop_query_app_status(self, desiredState=None, intervalSec=20, totalMin=30):
+    def loop_query_status(self, desiredState=None, intervalSec=20, totalMin=30):
         maxLoops = totalMin * 60 / intervalSec
         print(c.yellow(
             "\nPolling application every {} secs for next {} mins to display "
@@ -2005,7 +2005,7 @@ class App(ConfigNode):
                 print('\033[2K', end='')
                 i -= 1
             print()
-            allVmsStarted, allVmsStopped = self.query_app_status()
+            allVmsStarted, allVmsStopped = self.query_status()
             if desiredState == 'STARTED' and allVmsStarted:
                 break
             if desiredState == 'STOPPED' and allVmsStopped:
@@ -2017,10 +2017,10 @@ class App(ConfigNode):
             c.verbose(
                 "SSH NOTE: STARTED does not mean the OS of each machine has "
                 "finished booting\nVNC NOTE: URLs expire within a minute if not "
-                "used; refresh them with either\n          a `query_app_status` "
-                "or `loop_query_app_status` command\n")
+                "used; refresh them with either\n          a `query_status` "
+                "or `loop_query_status` command\n")
     
-    def ui_command_query_app_status(self):
+    def ui_command_query_status(self):
         """
         Query an app to get full details about all its VMs.
         
@@ -2033,9 +2033,9 @@ class App(ConfigNode):
             - VNC web URLs
         """
         print()
-        self.query_app_status()
+        self.query_status()
     
-    def query_app_status(self):
+    def query_status(self):
         vmDetails, cloudProvider, regionName, expirationTime = rCache.get_application_details(self.appId)
         if not vmDetails:
             self.print_message_app_not_published()
@@ -2121,7 +2121,7 @@ class App(ConfigNode):
             print()
         return allVmsAreStarted, allVmsAreStopped
     
-    def extend_app_autostop(self, minutes=60):
+    def extend_autostop(self, minutes=60):
         if not self.confirm_app_is_published():
             return False
         req = {'expirationFromNowSeconds': minutes * 60}
@@ -2134,7 +2134,7 @@ class App(ConfigNode):
                       .format(minutes)))
         rCache.purge_app_cache(self.appId)
     
-    def ui_command_extend_app_autostop(self, minutes=60):
+    def ui_command_extend_autostop(self, minutes=60):
         """
         Set the application auto-stop time via *minutes*.
         
@@ -2149,10 +2149,10 @@ class App(ConfigNode):
             elif minutes < 0:
                 print(c.RED("\nInvalid learner auto-stop time\n"))
                 return
-        self.extend_app_autostop(minutes)
+        self.extend_autostop(minutes)
         print()
     
-    def ui_complete_extend_app_autostop(self, parameters, text, current_param):
+    def ui_complete_extend_autostop(self, parameters, text, current_param):
         if current_param == 'minutes':
             if is_admin():
                 L = ['-1', '5', '30', '60', '120', '240', '480', '720', '1440']
@@ -2167,11 +2167,11 @@ class App(ConfigNode):
         else:
             return completions
     
-    def print_app_definition(self):
+    def print_def(self):
         pager("JSON definition for APPLICATION '{}'\n".format(self.appName) +
               ui.prettify_json(rClient.get_application(self.appId)))
     
-    def ui_command_print_app_definition(self, outputFile='@pager'):
+    def ui_command_print_def(self, outputFile='@pager'):
         """
         Pretty-print app JSON in pager or export to *outputFile*.
         
@@ -2196,7 +2196,7 @@ class App(ConfigNode):
                 return
             print(c.green("Exported app definition to file: '{}'\n".format(outputFile)))
     
-    def ui_complete_print_app_definition(self, parameters, text, current_param):
+    def ui_complete_print_def(self, parameters, text, current_param):
         if current_param != 'outputFile':
             return []
         completions = complete_path(text, S_ISREG)
@@ -2220,7 +2220,7 @@ class App(ConfigNode):
         print(c.green("Deleted application {}".format(self.appName)))
         self.parent.remove_child(self)
     
-    def ui_command_delete_app(self, noconfirm='false'):
+    def ui_command_delete(self, noconfirm='false'):
         """
         Delete an application.
         
@@ -2239,7 +2239,7 @@ class App(ConfigNode):
             print("Leaving app intact (probably a good choice)")
         print()
     
-    def ui_complete_delete_app(self, parameters, text, current_param):
+    def ui_complete_delete(self, parameters, text, current_param):
         if current_param == 'noconfirm':
             completions = [a for a in ['false', 'true']
                            if a.startswith(text)]
@@ -2250,7 +2250,7 @@ class App(ConfigNode):
         else:
             return completions
     
-    def ui_command_publish_app(self, region='@prompt', startAllVms='true'):
+    def ui_command_publish(self, region='@prompt', startAllVms='true'):
         """
         Interactively publish an application to the cloud.
         
@@ -2272,13 +2272,13 @@ class App(ConfigNode):
                 print(c.red("\nYou have reached or exceeded the maximum number ({}) of published apps!"
                             .format(rOpt.maxLearnerPublishedApps)))
                 print("Delete an app and try running command:")
-                print(c.BOLD("    /apps/{}/ publish_app\n".format(self.appName)))
+                print(c.BOLD("    /apps/{}/ publish\n".format(self.appName)))
                 return
             elif totalActiveVms >= rOpt.maxLearnerActiveVms:
                 print(c.red("\nYou have reached or exceeded the maximum number ({}) of active VMs!"
                             .format(rOpt.maxLearnerActiveVms)))
                 print("Stop a VM (or a whole application) and then try running command:")
-                print(c.BOLD("    /apps/{}/ start_app\n".format(self.appName)))
+                print(c.BOLD("    /apps/{}/ start\n".format(self.appName)))
                 return
         # Choosing time
         pubLocations = rClient.get_application_publish_locations(self.appId)
@@ -2324,13 +2324,13 @@ class App(ConfigNode):
         print(c.yellow("\nRavello now publishing your application (Could take 5 to 20 minutes)"))
         # Configure auto-stop (prompt if admin; otherwise set 1hr)
         if startAllVms:
-            self.extend_app_autostop()
-            self.loop_query_app_status(desiredState='STARTED')
+            self.extend_autostop()
+            self.loop_query_status(desiredState='STARTED')
         else:
             rCache.purge_app_cache(self.appId)
             print()
     
-    def ui_complete_publish_app(self, parameters, text, current_param):
+    def ui_complete_publish(self, parameters, text, current_param):
         if current_param == 'region':
             L = ['@prompt', '@auto']
             pubLocations = rClient.get_application_publish_locations(self.appId)
@@ -2348,7 +2348,7 @@ class App(ConfigNode):
         else:
             return completions
     
-    def ui_command_start_app(self):
+    def ui_command_start(self):
         """
         Start a stopped application.
         
@@ -2365,7 +2365,7 @@ class App(ConfigNode):
                 print("Stop a VM (or a whole application) and then try this again")
                 return
         # Start out by setting autostop
-        self.extend_app_autostop()
+        self.extend_autostop()
         try:
             rClient.start_application(self.appId)
         except:
@@ -2373,9 +2373,9 @@ class App(ConfigNode):
             raise
         print(c.yellow("\nApplication now starting"))
         rCache.purge_app_cache(self.appId)
-        self.loop_query_app_status(desiredState='STARTED')
+        self.loop_query_status(desiredState='STARTED')
     
-    def ui_command_stop_app(self):
+    def ui_command_Stop(self):
         """
         Stop a running application.
         
@@ -2390,7 +2390,7 @@ class App(ConfigNode):
         print(c.yellow("\nApplication now stopping"))
         rCache.purge_app_cache(self.appId)
     
-    def ui_command_restart_app(self):
+    def ui_command_restart(self):
         """
         Restart a running application.
         
@@ -2405,7 +2405,7 @@ class App(ConfigNode):
             raise
         print(c.yellow("\nApplication now restarting"))
         rCache.purge_app_cache(self.appId)
-        self.loop_query_app_status(desiredState='STARTED')
+        self.loop_query_status(desiredState='STARTED')
     
     def generate_images(self):
         """Generate snapshot of all vms in the app. Not ready for primetime."""
@@ -2518,12 +2518,12 @@ class Vm(ConfigNode):
         else:
             return False
     
-    def print_vm_definition(self):
+    def print_def(self):
         """Pretty-print vm JSON in pager."""
         pager("JSON definition for VM '{}' in APPLICATION '{}'\n".format(self.vmName, self.appName) +
               ui.prettify_json(rClient.get_vm(self.appId, self.vmId, aspect='deployment')))
     
-    def ui_command_print_vm_definition(self, outputFile='@pager'):
+    def ui_command_print_def(self, outputFile='@pager'):
         """
         Pretty-print VM JSON in pager or export to *outputFile*.
         
@@ -2533,7 +2533,7 @@ class Vm(ConfigNode):
         print()
         outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
         if outputFile == '@pager':
-            self.print_vm_definition()
+            self.print_def()
         else:
             try:
                 ui.prepare_file_for_writing(outputFile)
@@ -2548,7 +2548,7 @@ class Vm(ConfigNode):
                 return
             print(c.green("Exported VM definition to file: '{}'\n".format(outputFile)))
     
-    def ui_complete_print_vm_definition(self, parameters, text, current_param):
+    def ui_complete_print_def(self, parameters, text, current_param):
         if current_param != 'outputFile':
             return []
         completions = complete_path(text, S_ISREG)
@@ -2556,11 +2556,11 @@ class Vm(ConfigNode):
             completions = [completions[0] + ' ']
         return completions
     
-    def ui_command_start_vm(self):
+    def ui_command_start(self):
         """
         Start a stopped VM.
         
-        start_vm, stop_vm, & restart_vm all rely on the guest OS correctly
+        start, Stop, & restart all rely on the guest OS correctly
         handling ACPI events. If ACPI is disabled in the kernel (acpi=off) or
         the appropriate process isn't listening (RHEL6: acpid / RHEL7: systemd),
         the guest will gleefully ignore the request.
@@ -2569,7 +2569,7 @@ class Vm(ConfigNode):
             return
         if not self.confirm_vm_is_state('STOPPED'):
             return
-        self.parent.parent.extend_app_autostop()
+        self.parent.parent.extend_autostop()
         try:
             rClient.start_vm(self.appId, self.vmId)
         except:
@@ -2578,7 +2578,7 @@ class Vm(ConfigNode):
         print(c.yellow("\nVM now starting\n"))
         rCache.purge_app_cache(self.appId)
     
-    def ui_command_reset_vm_to_last_shutdown_state(self):
+    def ui_command_reset_to_last_shutdown_state(self):
         """
         Reset VM to the state it was in as of last shutdown.
         
@@ -2601,11 +2601,11 @@ class Vm(ConfigNode):
         print("FQDN should stay the same; VNC URL will change; ssh host key might change\n")
         rCache.purge_app_cache(self.appId)
     
-    def ui_command_stop_vm(self):
+    def ui_command_Stop(self):
         """
         Gracefully stop a running VM.
         
-        start_vm, stop_vm, & restart_vm all rely on the guest OS correctly
+        start, Stop, & restart all rely on the guest OS correctly
         handling ACPI events. If ACPI is disabled in the kernel (acpi=off) or
         the appropriate process isn't listening (RHEL6: acpid / RHEL7: systemd),
         the guest will gleefully ignore the request.
@@ -2622,7 +2622,7 @@ class Vm(ConfigNode):
         print(c.yellow("\nVM now stopping\n"))
         rCache.purge_app_cache(self.appId)
     
-    def ui_command_poweroff_vm(self):
+    def ui_command_kill(self):
         """
         Cut the power to a VM, hopefully forcing it off immediately.
         
@@ -2642,11 +2642,11 @@ class Vm(ConfigNode):
         print(c.yellow("\nVM should be immediately forced off\n"))
         rCache.purge_app_cache(self.appId)
     
-    def ui_command_restart_vm(self):
+    def ui_command_restart(self):
         """
         Gracefully restart a running VM.
         
-        start_vm, stop_vm, & restart_vm all rely on the guest OS correctly
+        start, Stop, & restart all rely on the guest OS correctly
         handling ACPI events. If ACPI is disabled in the kernel (acpi=off) or
         the appropriate process isn't listening (RHEL6: acpid / RHEL7: systemd),
         the guest will gleefully ignore the request.
