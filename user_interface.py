@@ -44,6 +44,9 @@ except:
 
 # Globals
 user = c = rOpt = rClient = rCache = appnamePrefix = None
+defaultAppExpireTime = 120
+defaultAppExtendTime = 60
+maxLearnerExtendTime = 120
 
 
 def is_admin():
@@ -1968,9 +1971,10 @@ class App(ConfigNode):
             if intervalSec < 5:
                 print(c.red("\nUsing minimum learner interval of 5 sec"))
                 intervalSec = 5
-            if totalMin > 120:
-                print(c.red("\nUsing maximum learner watch-time of 120 min"))
-                totalMin = 120
+            if totalMin > maxLearnerExtendTime:
+                print(c.red("\nUsing maximum learner watch-time of {} min"
+                            .format(maxLearnerExtendTime)))
+                totalMin = maxLearnerExtendTime
             elif totalMin < 1:
                 print(c.red("\nUsing minimum learner watch-time of 1 min"))
                 totalMin = 1
@@ -2141,18 +2145,20 @@ class App(ConfigNode):
                       .format(minutes)))
         rCache.purge_app_cache(self.appId)
     
-    def ui_command_extend_autostop(self, minutes=60):
+    def ui_command_extend_autostop(self, minutes=defaultAppExtendTime):
         """
         Set the application auto-stop time via *minutes*.
         
-        Learners can only set auto-stop from 0 up to 120 min (default: 60 min).
+        Defaults to 60 min (defaultAppExtendTime). Learners can set the
+        auto-stop timer from 0 to 120 min (maxLearnerExtendTime).
         Admins can set any value, including '-1' which disables auto-stop timer.
         """
-        minutes = self.ui_eval_param(minutes, 'number', 60)
+        minutes = self.ui_eval_param(minutes, 'number', defaultAppExtendTime)
         if not is_admin():
-            if minutes > 120:
-                print(c.red("\nUsing maximum learner auto-stop time of 120 minutes"))
-                minutes = 60
+            if minutes > maxLearnerExtendTime:
+                print(c.red("\nUsing maximum learner auto-stop time of {} minutes"
+                            .format(maxLearnerExtendTime)))
+                minutes = maxLearnerExtendTime
             elif minutes < 0:
                 print(c.RED("\nInvalid learner auto-stop time\n"))
                 return
@@ -2329,9 +2335,9 @@ class App(ConfigNode):
             raise
         self.parent.numberOfPublishedApps += 1
         print(c.yellow("\nRavello now publishing your application (Could take a while)"))
-        # Configure auto-stop (prompt if admin; otherwise set 2hr)
+        # Configure auto-stop
         if startAllVms:
-            self.extend_autostop(minutes=120)
+            self.extend_autostop(minutes=defaultAppExpireTime)
             self.loop_query_status(desiredState='STARTED')
         else:
             rCache.purge_app_cache(self.appId)
@@ -2372,7 +2378,7 @@ class App(ConfigNode):
                 print("Stop a VM (or a whole application) and then try this again")
                 return
         # Start out by setting autostop
-        self.extend_autostop(minutes=120)
+        self.extend_autostop(minutes=defaultAppExpireTime)
         try:
             rClient.start_application(self.appId)
         except:
@@ -2576,7 +2582,7 @@ class Vm(ConfigNode):
             return
         if not self.confirm_vm_is_state('STOPPED'):
             return
-        self.parent.parent.extend_autostop(minutes=120)
+        self.parent.parent.extend_autostop(minutes=defaultAppExtendTime)
         try:
             rClient.start_vm(self.appId, self.vmId)
         except:
