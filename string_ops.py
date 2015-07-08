@@ -30,13 +30,10 @@ class Printer(object):
         """Perform some simple character substitution on *string*."""
         return sub(pattern, repl, string, count)
     
-    def verbose(self, message, end=None):
+    def verbose(self, message, end='\n'):
         """Print *message* in magenta only if verboseMessages is True."""
         if self.enableVerbose:
-            if end is not None:
-                print(self.magenta(message), end=end)
-            else:
-                print(self.magenta(message))
+            print(self.magenta(message), end=end)
     
     def REVERSE(self, txt):
         """Return text in reverse (& bolded)."""
