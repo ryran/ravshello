@@ -2021,15 +2021,16 @@ class App(ConfigNode):
         print(c.green("All VMs reached '{}' state!\n".format(desiredState)))
         if desiredState == 'STARTED':
             c.verbose(
-                "SSH NOTE:  'STARTED' does not mean the OS of each machine has finished booting\n\n"
-                "VNC NOTE:  URLs expire within a minute if not used; refresh them with command:\n"
-                "           {}\n".format(c.BOLD('/apps/{} query_status'.format(self.appName))))
+                "SSH NOTE: The VM 'STARTED' state doesn't guarantee an OS has finished booting\n")
             c.verbose(
-                "CHECK TIMER:  The auto-stop timer is counting down; check it with command:\n"
-                "              {}\n".format(c.BOLD('/apps/{} ls'.format(self.appName))))
+                "VNC NOTE: URLs expire within a minute if not used; refresh them with command:\n"
+                "    \033[0m{}\n".format(c.BOLD("/apps/{} query_status".format(self.appName))))
             c.verbose(
-                "EXTEND TIMER:  If you need more time, make sure to use the command:\n"
-                "               {}\n".format(c.BOLD('/apps/{} extend_autostop'.format(self.appName))))
+                "CHECK TIMER: The auto-stop timer is counting down; check it with command:\n"
+                "    \033[0m{}\n".format(c.BOLD("/apps/{} ls".format(self.appName))))
+            c.verbose(
+                "EXTEND TIMER: If you need more time, make sure to use the command:\n"
+                "    \033[0m{}\n".format(c.BOLD("/apps/{} extend_autostop".format(self.appName))))
     
     def ui_command_query_status(self):
         """
