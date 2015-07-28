@@ -835,7 +835,7 @@ class Billing(ConfigNode):
                     user = "APPS THAT DON'T FOLLOW NICKNAME NAMING SCHEME"
             else:
                 try:
-                    user = app['owner']['email']
+                    user = app['owner']
                 except:
                     user = "ORG (not associated with specific apps)"
             if user not in appsByUser:
