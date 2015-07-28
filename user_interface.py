@@ -2195,7 +2195,7 @@ class App(ConfigNode):
         print()
         outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
         if outputFile == '@pager':
-            self.print_app_definition()
+            self.print_def()
         else:
             try:
                 ui.prepare_file_for_writing(outputFile)
