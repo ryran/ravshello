@@ -126,7 +126,7 @@ continue_or_quit() {
 }
 
 # List of Fedora rpm names we need
-reqdRpms="python-pip PyYAML python-dateutil pyparsing"
+reqdRpms="python-pip PyYAML python-dateutil pyparsing python-urwid"
 [[ ${pyVers[micro]} -lt 9 ]] && reqdRpms+=" pyOpenSSL python-pyasn1-modules python-ndg_httpsclient"
 rpmList=
 for rpm in ${reqdRpms}; do
