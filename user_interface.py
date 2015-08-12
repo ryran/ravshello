@@ -2676,3 +2676,21 @@ class Vm(ConfigNode):
             raise
         print(c.yellow("\nVM now restarting\n"))
         rCache.purge_app_cache(self.appId)
+
+    def ui_command_repair(self):
+        """
+        Repair a VM that has entered an ERROR state.
+        
+        ERROR states are usually caused by problems on the hypervisor (e.g., a
+        Ravello/Amazon/Google problem). They can't always be fixed by using a
+        repair call.
+        """
+        if not self.parent.parent.confirm_app_is_published():
+            return
+        try:
+            rClient.repair_vm(self.appId, self.vmId)
+        except:
+            print(c.red("\nProblem repairing VM!\n"))
+            raise
+        print(c.yellow("\nAPI 'repair' call was sent; check VM status\n"))
+        rCache.purge_app_cache(self.appId)
