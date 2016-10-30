@@ -827,6 +827,10 @@ class Billing(ConfigNode):
                 appName = app['appName']
             except:
                 appName = "UNDEFINED"
+            try:
+                upTime = app['upTime']
+            except:
+                upTime = "UNDEFINED"
             if sortBy == 'nick':
                 if appName.startswith('k:'):
                     user, appName = appName.split('__', 1)
@@ -867,7 +871,8 @@ class Billing(ConfigNode):
                 creationTime = 0
             appsByUser[user].append({
                 'appName': appName,
-                'appHours': hours,
+                'unitHours': hours,
+                'upTime': upTime,
                 'totalCharges': totalCharges,
                 'creationTime': creationTime,
                 })
@@ -877,14 +882,14 @@ class Billing(ConfigNode):
         """Generate CSV-formatted output of billing info."""
         appsByUser, chargesByProduct = self._process_billing_input(monthsCharges, sortBy)
         out = [
-            "User,App Name,App Hours,App Charges"
+            "User,App Name,Unit Hours,Up Time Hours,App Charges"
             ]
         for user in appsByUser:
             for app in sorted(appsByUser[user], key=itemgetter('creationTime')):
-                out.append("{},{},{},{}".format(
-                    user, app['appName'], app['appHours'], app['totalCharges']))
+                out.append("{},{},{},{},{}".format(
+                    user, app['appName'], app['unitHours'], app['upTime'], app['totalCharges']))
         return "\n".join(out)
-    
+ 
     def gen_txt_summary(self, monthsCharges, sortBy):
         """Generate billing goodness with pretty colors."""
         out = []
