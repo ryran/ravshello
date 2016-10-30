@@ -2417,6 +2417,7 @@ class App(ConfigNode):
         """
         if not self.confirm_app_is_published():
             return
+        self.extend_autostop(minutes=defaultAppExpireTime)
         try:
             rClient.restart_application(self.appId)
         except:
