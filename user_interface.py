@@ -2283,7 +2283,7 @@ class App(ConfigNode):
             print(c.red("\nApplication already published!\n"))
             return
         # Set defaults
-        selection = preferredCloud = preferredRegion = None
+        selection = preferredRegion = None
         if not is_admin():
             # Check that we don't have more published apps than we should
             totalActiveVms = get_num_learner_active_vms(user)
@@ -2303,35 +2303,33 @@ class App(ConfigNode):
         pubLocations = rClient.get_application_publish_locations(self.appId)
         # Somewhat ironically, we only add cost-optimized option for admins
         if is_admin():
-            pubLocations.insert(0, {'regionName': " ", 'cloudName': "auto-select cheapest"})
+            pubLocations.insert(0, {'regionName': "@auto", 'regionDisplayName': "auto-select cheapest"})
         if region == '@prompt':
             print(c.BOLD("\nAvailable publish locations:"))
             for i, loc in enumerate(pubLocations):
-                print("  {})  {} {}".format(c.cyan(i), loc['cloudName'], loc['regionName']))
+                print("  {})  {}".format(c.cyan(i), loc['regionName']))
             # Prompt for provider selection
             selection = ui.prompt_for_number(
-                c.CYAN("\nSelect cloud provider/region in which to provision your VMs by entering a number: "),
+                c.CYAN("\nSelect cloud region in which to provision your VMs by entering a number: "),
                 endRange=i)
-            if 'auto-select cheapest' in pubLocations[selection]['cloudName']:
+            if '@auto' in pubLocations[selection]['regionName']:
                 optimizationLevel = 'COST_OPTIMIZED'
             else:
                 optimizationLevel = 'PERFORMANCE_OPTIMIZED'
-                preferredCloud = pubLocations[selection]['cloudName']
                 preferredRegion = pubLocations[selection]['regionName']
         elif region == '@auto':
             optimizationLevel = 'COST_OPTIMIZED'
         else:
             for i, loc in enumerate(pubLocations):
-                if region == "{}/{}".format(loc['cloudName'], loc['regionName']):
+                if region == loc['regionName']:
                     optimizationLevel = 'PERFORMANCE_OPTIMIZED'
-                    preferredCloud = loc['cloudName']
                     preferredRegion = loc['regionName']
                     break
             else:
                 print(c.RED("Invalid region specified!\n"))
                 return
         # Build request dictionary
-        req = {'preferredCloud' : preferredCloud, 'preferredRegion' : preferredRegion,
+        req = {'preferredRegion' : preferredRegion,
                'optimizationLevel': optimizationLevel, 'startAllVms': startAllVms}
         # Attempt publish request
         try:
@@ -2354,7 +2352,7 @@ class App(ConfigNode):
             L = ['@prompt', '@auto']
             pubLocations = rClient.get_application_publish_locations(self.appId)
             for p in pubLocations:
-                L.append("{}/{}".format(p['cloudName'], p['regionName']))
+                L.append(p['regionName'])
             completions = [a for a in L
                            if a.startswith(text)]
         elif current_param == 'startAllVms':
