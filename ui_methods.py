@@ -228,7 +228,7 @@ class RavelloCache(object):
         """Return details for all VMs in application with ID *app*."""
         appDefinition = self.r.get_application(app, aspect='deployment')
         if not appDefinition['published']:
-            return None, None, None, None
+            return None, None, None
         vmDetails = []
         for vm in appDefinition['deployment']['vms']:
             vmDict = {
@@ -279,4 +279,4 @@ class RavelloCache(object):
                 expirationTime = sanitize_timestamp(appDefinition['deployment']['expirationTime'])
             except:
                 expirationTime = None
-        return vmDetails, appDefinition['deployment']['cloud'], appDefinition['deployment']['regionName'], expirationTime
+        return vmDetails, appDefinition['deployment']['cloudRegion']['name'], expirationTime

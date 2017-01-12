@@ -1823,7 +1823,7 @@ class Applications(ConfigNode):
                 else:
                     pubLocations = rClient.get_blueprint_publish_locations(bpid)
                     for p in pubLocations:
-                        L.append("{}/{}".format(p['cloudName'], p['regionName']))
+                        L.append(p['regionName'])
                     completions = [a for a in L
                                    if a.startswith(text)]
         elif current_param == 'startAllVms':
@@ -1852,8 +1852,7 @@ class App(ConfigNode):
     def summary(self):
         app = rCache.get_app(self.appId)
         if app['published']:
-            cloud = app['deployment']['cloud']
-            region = app['deployment']['regionName']
+            region = app['deployment']['cloudRegion']['name']
             totalErrorVms = app['deployment']['totalErrorVms']
             appState = ravello_sdk.application_state(app)
             if isinstance(appState, list):
@@ -1880,7 +1879,7 @@ class App(ConfigNode):
                     note = ""
             except:
                 note = ""
-            return ("{} in {} {}{}".format(appState, cloud, region, note), hazHappy)
+            return ("{} in {}{}".format(appState, region, note), hazHappy)
         else:
             return ("Unpublished draft", None)
     
@@ -2053,7 +2052,7 @@ class App(ConfigNode):
         self.query_status()
     
     def query_status(self):
-        vmDetails, cloudProvider, regionName, expirationTime = rCache.get_application_details(self.appId)
+        vmDetails, regionName, expirationTime = rCache.get_application_details(self.appId)
         if not vmDetails:
             self.print_message_app_not_published()
             return None, None
@@ -2086,7 +2085,7 @@ class App(ConfigNode):
             autoStopMessage = c.BOLD("never had auto-stop set")
         # Print
         print(
-            c.BOLD("App VMs in {} ({}) ".format(cloudProvider, regionName)) +
+            c.BOLD("App VMs in region {} ".format(regionName)) +
             autoStopMessage)
         print()
         for vm in vmDetails:
