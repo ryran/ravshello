@@ -250,16 +250,16 @@ class RavelloCache(object):
                             vmDict['ssh']['port'] = " -p {}".format(service['externalPort'])
                         if not service['name'].startswith('dummy'):
                             vmDict['exPorts'].append(
-                                "{}/{}".format(service['externalPort'],
-                                               service['protocol']))
+                                "{}/{} ({})".format(service['externalPort'],
+                                                    service['protocol']),
+                                                    service['name'])
             except:
                 pass
             try:
                 for interface in vm['networkConnections']:
                     vmDict['ipAddrs'].append(
-                        "{} ({})"
-                        .format(interface['ipConfig']['staticIpConfig']['ip'],
-                                interface['name']))
+                        "{} ({})".format(interface['ipConfig']['staticIpConfig']['ip'],
+                                         interface['name']))
             except:
                 pass
             try:
