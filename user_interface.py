@@ -2123,12 +2123,17 @@ class App(ConfigNode):
                 if vm['hostnames']:
                     print("     Internal DNS Name:  ", end="")
                     print(*vm['hostnames'], sep=', ')
-                if vm['ipAddrs']:
-                    print("     Internal IPs:       ", end="")
-                    print(*vm['ipAddrs'], sep=', ')
-                if vm['exPorts']:
-                    print("     External Ports:     ", end="")
-                    print(*vm['exPorts'], sep=', ')
+                if vm['nics']:
+                    for i in vm['nics']:
+                        print("     NIC {}".format(i['name']))
+                        print("       Private IP:       {}".format(i['ip_Private']))
+                        if i['ip_Public']:
+                            print("       Public Static:    {} ({})".format(i['ip_Public'], i['fqdn']))
+                        if i['ip_Forwarder'] and i['services']:
+                            print("       Public DNAT:      {} ({})".format(i['ip_Forwarder'], i['fqdn']))
+                        for s in i['services']:
+                            print("       External Svc:     {svc} {export}/{proto} maps to internal {inport}/{proto}".format(
+                                svc=s['name'], export=s['externalPort'], proto=s['protocol'], inport=s['portRange']))
                 if vm['state'] not in 'STARTING':
                     if ssh:
                         print("     SSH Command:        {}".format(ssh))

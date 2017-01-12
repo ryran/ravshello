@@ -234,49 +234,65 @@ class RavelloCache(object):
             vmDict = {
                 'name': vm['name'],
                 'state': vm['state'],
-                'exPorts': [],
                 'ssh': {
                     'fqdn': '',
                     'port': '',
                     },
                 'vnc': '',
-                'ipAddrs': [],
+                'nics': [],
                 'hostnames': [],
                 }
-            try:
-                for service in vm['suppliedServices']:
-                    if service['external'] == True:
-                        if service['name'] == 'ssh':
-                            vmDict['ssh']['port'] = " -p {}".format(service['externalPort'])
-                        if not service['name'].startswith('dummy'):
-                            vmDict['exPorts'].append(
-                                "{}/{} ({})".format(service['externalPort'],
-                                                    service['protocol'],
-                                                    service['name']))
-            except:
-                pass
-            try:
-                for interface in vm['networkConnections']:
-                    vmDict['ipAddrs'].append(
-                        "{} ({})".format(interface['ipConfig']['staticIpConfig']['ip'],
-                                         interface['name']))
-            except:
-                pass
-            try:
-                vmDict['ssh']['fqdn'] = vm['externalFqdn']
-            except:
-                pass
-            try:
-                vmDict['vnc'] = self.r.get_vnc_url(app, vm['id'])
-            except:
-                pass
+            if vm['state'] == 'STARTED':
+                if vm.has_key('networkConnections'):
+                    for interface in vm['networkConnections']:
+                        i = {
+                            'name': interface['name'],
+                            'ip_Public': '',
+                            'ip_Forwarder': '',
+                            'ip_Private': '',
+                            'fqdn': '',
+                            'services': [],
+                            }
+                        if interface['ipConfig']['hasPublicIp'] == True:
+                            i['ip_Public'] = interface['ipConfig']['publicIp']
+                        elif interface['ipConfig'].has_key('publicIp'):
+                            i['ip_Forwarder'] = interface['ipConfig']['publicIp']
+                        if interface['ipConfig'].has_key('fqdn'):
+                            i['fqdn'] = interface['ipConfig']['fqdn']
+                        if interface['ipConfig'].has_key('autoIpConfig'):
+                            i['ip_Private'] = interface['ipConfig']['autoIpConfig']['allocatedIp']
+                        elif interface['ipConfig'].has_key('staticIpConfig'):
+                            i['ip_Private'] = interface['ipConfig']['staticIpConfig']['ip']
+                        
+                        if vm.has_key('suppliedServices'):
+                            for service in vm['suppliedServices']:
+                                if service['external'] and service['useLuidForIpConfig'] and interface['ipConfig']['id'] == service['ipConfigLuid'] and not service['name'].startswith('dummy'):
+                                    if service['name'] == 'ssh':
+                                        vmDict['ssh']['port'] = " -p {}".format(service['externalPort'])
+                                        vmDict['ssh']['fqdn'] = i['fqdn']
+                                    s = {
+                                        'name': service['name'],
+                                        'externalPort': service['externalPort'],
+                                        'protocol': service['protocol'],
+                                        'portRange': service['portRange'],
+                                        }
+                                    i['services'].append(s)
+                        vmDict['nics'].append(i)
+                # try:
+                #     vmDict['ssh']['fqdn'] = vm['externalFqdn']
+                # except:
+                #     pass
+                try:
+                    vmDict['vnc'] = self.r.get_vnc_url(app, vm['id'])
+                except:
+                    pass
             try:
                 vmDict['hostnames'] = vm['hostnames']
             except:
                 pass
             vmDetails.append(vmDict)
-            try:
-                expirationTime = sanitize_timestamp(appDefinition['deployment']['expirationTime'])
-            except:
-                expirationTime = None
+        try:
+            expirationTime = sanitize_timestamp(appDefinition['deployment']['expirationTime'])
+        except:
+            expirationTime = None
         return vmDetails, appDefinition['deployment']['cloudRegion']['name'], expirationTime
