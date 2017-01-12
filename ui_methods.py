@@ -251,8 +251,8 @@ class RavelloCache(object):
                         if not service['name'].startswith('dummy'):
                             vmDict['exPorts'].append(
                                 "{}/{} ({})".format(service['externalPort'],
-                                                    service['protocol']),
-                                                    service['name'])
+                                                    service['protocol'],
+                                                    service['name']))
             except:
                 pass
             try:
