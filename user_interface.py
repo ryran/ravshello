@@ -2059,9 +2059,9 @@ class App(ConfigNode):
         # Defaults
         allVmsAreStarted = True
         allVmsAreStopped = True
-        key = ""
+        sshKey = ""
         if rOpt.cfgFile['sshKeyFile']:
-            key = " -i {}".format(rOpt.cfgFile['sshKeyFile'])
+            sshKey = " -i {}".format(rOpt.cfgFile['sshKeyFile'])
         if expirationTime:
             diff = expirationTime - time()
             m, s = divmod(expirationTime - time(), 60)
@@ -2092,7 +2092,7 @@ class App(ConfigNode):
             ssh = vnc = None
             # Set ssh command
             if vm['ssh']['fqdn']:
-                ssh = c.cyan("ssh{}{} root@{}".format(key, vm['ssh']['port'], vm['ssh']['fqdn']))
+                ssh = c.cyan("ssh{}{} root@{}".format(sshKey, vm['ssh']['port'], vm['ssh']['fqdn']))
             # Set VNC url
             if vm['vnc']:
                 vnc = c.blue(vm['vnc'])
@@ -2123,12 +2123,21 @@ class App(ConfigNode):
                 if vm['hostnames']:
                     print("     Internal DNS Name:  ", end="")
                     print(*vm['hostnames'], sep=', ')
-                if vm['ipAddrs']:
-                    print("     Internal IPs:       ", end="")
-                    print(*vm['ipAddrs'], sep=', ')
-                if vm['exPorts']:
-                    print("     External Ports:     ", end="")
-                    print(*vm['exPorts'], sep=', ')
+                if vm['nics']:
+                    for i in vm['nics']:
+                        print("     NIC {}".format(i['name']))
+                        print("       Private IP:       {}".format(i['ip_Private']))
+                        for ip in i['ip_Additional']:
+                            print("       Private IP:       {}".format(ip))
+                        if i['ip_Elastic']:
+                            print("       Public Elastic:   {} ({})".format(i['ip_Elastic'], i['fqdn']))
+                        if i['ip_Public']:
+                            print("       Public Static:    {} ({})".format(i['ip_Public'], i['fqdn']))
+                        if i['ip_Forwarder'] and i['services']:
+                            print("       Public DNAT:      {} ({})".format(i['ip_Forwarder'], i['fqdn']))
+                        for s in i['services']:
+                            print("       External Svc:     {svc} {export}/{proto} maps to internal {inport}/{proto}".format(
+                                svc=s['name'], export=s['externalPort'], proto=s['protocol'], inport=s['portRange']))
                 if vm['state'] not in 'STARTING':
                     if ssh:
                         print("     SSH Command:        {}".format(ssh))
