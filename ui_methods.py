@@ -235,26 +235,39 @@ class RavelloCache(object):
                 'name': vm['name'],
                 'state': vm['state'],
                 'ssh': {
-                    'fqdn': '',
                     'port': '',
+                    'fqdn': '',
                     },
                 'vnc': '',
                 'nics': [],
                 'hostnames': [],
                 }
+            try:
+                vmDict['hostnames'] = vm['hostnames']
+            except:
+                pass
             if vm['state'] == 'STARTED':
+                try:
+                    vmDict['vnc'] = self.r.get_vnc_url(app, vm['id'])
+                except:
+                    pass
                 if vm.has_key('networkConnections'):
                     for interface in vm['networkConnections']:
                         i = {
                             'name': interface['name'],
+                            'ip_Elastic': '',
                             'ip_Public': '',
                             'ip_Forwarder': '',
                             'ip_Private': '',
+                            'ip_Additional': [],
                             'fqdn': '',
                             'services': [],
                             }
-                        if interface['ipConfig']['hasPublicIp'] == True:
-                            i['ip_Public'] = interface['ipConfig']['publicIp']
+                        if interface['ipConfig']['hasPublicIp']:
+                            try:
+                                i['ip_Elastic'] = interface['ipConfig']['elasticIpAddress']
+                            except:
+                                i['ip_Public'] = interface['ipConfig']['publicIp']
                         elif interface['ipConfig'].has_key('publicIp'):
                             i['ip_Forwarder'] = interface['ipConfig']['publicIp']
                         if interface['ipConfig'].has_key('fqdn'):
@@ -263,11 +276,14 @@ class RavelloCache(object):
                             i['ip_Private'] = interface['ipConfig']['autoIpConfig']['allocatedIp']
                         elif interface['ipConfig'].has_key('staticIpConfig'):
                             i['ip_Private'] = interface['ipConfig']['staticIpConfig']['ip']
-                        
+                        if interface.has_key('additionalIpConfig'):
+                            for addtlIp in interface['additionalIpConfig']:
+                                if addtlIp.has_key('staticIpConfig'):
+                                    i['ip_Additional'].append(addtlIp['staticIpConfig']['ip'])
                         if vm.has_key('suppliedServices'):
                             for service in vm['suppliedServices']:
                                 if service['external'] and service['useLuidForIpConfig'] and interface['ipConfig']['id'] == service['ipConfigLuid'] and not service['name'].startswith('dummy'):
-                                    if service['name'] == 'ssh':
+                                    if service['name'] == 'ssh' and not vmDict['ssh']['port']:
                                         vmDict['ssh']['port'] = " -p {}".format(service['externalPort'])
                                         vmDict['ssh']['fqdn'] = i['fqdn']
                                     s = {
@@ -278,18 +294,6 @@ class RavelloCache(object):
                                         }
                                     i['services'].append(s)
                         vmDict['nics'].append(i)
-                # try:
-                #     vmDict['ssh']['fqdn'] = vm['externalFqdn']
-                # except:
-                #     pass
-                try:
-                    vmDict['vnc'] = self.r.get_vnc_url(app, vm['id'])
-                except:
-                    pass
-            try:
-                vmDict['hostnames'] = vm['hostnames']
-            except:
-                pass
             vmDetails.append(vmDict)
         try:
             expirationTime = sanitize_timestamp(appDefinition['deployment']['expirationTime'])
