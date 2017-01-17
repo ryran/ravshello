@@ -148,6 +148,7 @@ class RavelloCache(object):
         self.appCache = {}
         self.userCache = {}
         self.alertCache = {}
+        self.shareCache = {}
     
     def update_bp_cache(self):
         self._bpCache_tstamp = time()
@@ -267,6 +268,42 @@ class RavelloCache(object):
             return self.alertCache[eventName]
         else:
             return None
+    
+    def update_share_cache(self):
+        self._shareCache_tstamp = time()
+        self.shareCache = {}
+        for s in self.r.get_shares():
+            self.shareCache[s['id']] = s
+    
+    def purge_share_cache(self, shareId=None):
+        if shareId:
+            if shareId in self.shareCache:
+                del self.shareCache[shareId]
+        else:
+            self.shareCache = {}
+    
+    def get_share(self, shareId):
+        try:
+            ts = self._shareCache_tstamp
+        except:
+            self.update_share_cache()
+        else:
+            if get_timestamp_proximity(ts) < -120:
+                self.update_share_cache()
+        if shareId in self.shareCache:
+            return self.shareCache[shareId]
+        else:
+            return None
+    
+    def get_shares(self):
+        try:
+            ts = self._shareCache_tstamp
+        except:
+            self.update_share_cache()
+        else:
+            if get_timestamp_proximity(ts) < -120:
+                self.update_share_cache()
+        return self.shareCache.values()
     
     def get_application_details(self, app):
         """Return details for all VMs in application with ID *app*."""
