@@ -1598,15 +1598,14 @@ class Applications(ConfigNode):
         self.numberOfApps = self.numberOfPublishedApps = 0
         for app in rClient.get_applications():
             if is_admin() and rOpt.showAllApps:
-                App("%s" % app['name'], self, app['id'])
-                self.numberOfApps += 1
-                if app['published']: self.numberOfPublishedApps += 1
+                App(app['name'], self, app['id'])
+                if app['published']:
+                    self.numberOfPublishedApps += 1
             else:
                 if app['name'].startswith(appnamePrefix):
-                    App("%s" % app['name'].replace(appnamePrefix, ''),
-                        self, app['id'])
-                    self.numberOfApps += 1
-                    if app['published']: self.numberOfPublishedApps += 1
+                    App(app['name'].replace(appnamePrefix, ''), self, app['id'])
+                    if app['published']:
+                        self.numberOfPublishedApps += 1
     
     def summary(self):
         totalActiveVms = get_num_learner_active_vms(user)
@@ -1792,8 +1791,6 @@ class Applications(ConfigNode):
             print(c.red("\nProblem creating application!\n"))
             raise
         
-        self.numberOfApps += 1
-        
         # Strip appname prefix for purposes of our UI
         if not rOpt.showAllApps:
             appName = appName.replace(appnamePrefix, '')
@@ -1872,10 +1869,11 @@ class App(ConfigNode):
     Path: /apps/{APP_NAME}/
     """
     
-    def __init__(self, name, parent, appId):
+    def __init__(self, appName, parent, appId):
         ConfigNode.__init__(self, name, parent)
-        self.appId = appId
+        self.parent.numberOfApps += 1
         self.appName = name
+        self.appId = appId
         Vms(self)
     
     def summary(self):
@@ -2272,6 +2270,7 @@ class App(ConfigNode):
             raise
         if published:
             self.parent.numberOfPublishedApps -= 1
+        rCache.purge_app_cache(self.appId)
         self.parent.numberOfApps -= 1
         print(c.green("Deleted application {}".format(self.appName)))
         self.parent.remove_child(self)
