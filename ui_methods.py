@@ -144,9 +144,43 @@ class RavelloCache(object):
     def __init__(self, rClient):
         """Initialize using *client*, an instance of ravello_sdk.RavelloClient()."""
         self.r = rClient
+        self.bpCache = {}
         self.appCache = {}
         self.userCache = {}
         self.alertCache = {}
+    
+    def update_bp_cache(self):
+        self._bpCache_tstamp = time()
+        self.bpCache = {}
+        for b in self.r.get_blueprints():
+            self.bpCache[b['id']] = b
+    
+    def purge_bp_cache(self):
+        self.bpCache = {}
+    
+    def get_bp(self, bpId):
+        bpId = int(bpId)
+        try:
+            ts = self._bpCache_tstamp
+        except:
+            self.update_bp_cache()
+        else:
+            if get_timestamp_proximity(ts) < -120:
+                self.update_bp_cache()
+        if bpId in self.bpCache:
+            return self.bpCache[bpId]
+        else:
+            return None
+    
+    def get_bps(self):
+        try:
+            ts = self._bpCache_tstamp
+        except:
+            self.update_bp_cache()
+        else:
+            if get_timestamp_proximity(ts) < -120:
+                self.update_bp_cache()
+        return self.bpCache.values()
     
     def update_app_cache(self, appId=None):
         if appId:

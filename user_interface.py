@@ -1181,16 +1181,18 @@ class Blueprints(ConfigNode):
     
     def summary(self):
         if self.isPopulated:
-            return ("{} blueprints".format(self.numberOfBps), None)
+            learners = ""
+            if self.numberOfLearnerBps:
+                learners = ", {} tagged for learners".format(self.numberOfLearnerBps)
+            return ("{} blueprints{}".format(self.numberOfBps, learners), None)
         else:
             return ("To populate, run: refresh", False)
     
     def refresh(self):
         self._children = set([])
-        self.numberOfBps = 0
-        for bp in rClient.get_blueprints():
-            Bp("%s" % bp['name'], self, bp['id'], bp['creationTime'])
-            self.numberOfBps += 1
+        self.numberOfBps = self.numberOfLearnerBps = 0
+        for bp in rCache.get_bps():
+            Bp(bp['name'], self, bp)
         self.isPopulated = True
     
     def ui_command_refresh(self):
@@ -1403,12 +1405,18 @@ class Bp(ConfigNode):
     
     Path: /blueprints/{BLUEPRINT_NAME}/
     """
-    
-    def __init__(self, name, parent, bpId, creationTime):
-        ConfigNode.__init__(self, name, parent)
-        self.bpId = bpId
-        self.bpName = name
-        self.creationTime = datetime.fromtimestamp(int(str(creationTime)[:-3]))
+    def __init__(self, bpName, parent, bp):
+        ConfigNode.__init__(self, bpName, parent)
+        self.parent.numberOfBps += 1
+        self.bpName = bpName
+        self.bpId = bp['id']
+        self.bpOwner = bp['owner']
+        self.creationTime = datetime.fromtimestamp(int(str(bp['creationTime'])[:-3]))
+        if bp.has_key('description') and any(tag in bp['description'] for tag in rOpt.learnerBlueprintTag):
+            self.isLearnerBp = True
+            self.parent.numberOfLearnerBps += 1
+        else:
+            self.isLearnerBp = False
     
     def summary(self):
         if self.creationTime.year == datetime.now().year:
@@ -1419,7 +1427,11 @@ class Bp(ConfigNode):
                 created = self.creationTime.strftime('%m/%d')
         else:
             created = self.creationTime.strftime('%Y/%m/%d')
-        return ("Created: {}".format(created), None)
+        if self.isLearnerBp:
+            happy = True
+        else:
+            happy = None
+        return ("{} created on {}".format(self.bpOwner, created), happy)
     
     def delete(self):
         try:
@@ -1429,6 +1441,7 @@ class Bp(ConfigNode):
             raise
         print(c.green("Deleted blueprint {}\n".format(self.bpName)))
         self.parent.remove_child(self)
+        self.parent.numberOfBps -= 1
     
     def ui_command_delete(self, noconfirm='false', nobackup='false'):
         """
