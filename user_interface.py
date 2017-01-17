@@ -202,17 +202,16 @@ class Events(ConfigNode):
     
     def summary(self):
         if self.isPopulated:
-            return ("{} possible events".format(self.numberOfEvents), None)
+            return ("Alerts registered for {} of {} possible events".format(self.numberOfRegisteredEvents, self.numberOfEvents), None)
         else:
             return ("To populate, run: refresh", False)
         
     def refresh(self):
         self._children = set([])
         rCache.update_user_cache()
-        self.numberOfEvents = 0
+        self.numberOfEvents = self.numberOfRegisteredEvents = 0
         for eventName in rClient.get_events():
             Event("%s" % eventName.swapcase(), self)
-            self.numberOfEvents += 1
         self.isPopulated = True
     
     def ui_command_refresh(self):
@@ -317,6 +316,7 @@ class Event(ConfigNode):
     
     def __init__(self, eventName, parent):
         ConfigNode.__init__(self, eventName, parent)
+        self.parent.numberOfEvents += 1
         self.eventName = eventName.swapcase()
         self.refresh()
     
@@ -324,10 +324,10 @@ class Event(ConfigNode):
         self._children = set([])
         eventAlerts = rCache.get_alerts_for_event(self.eventName)
         if eventAlerts:
+            self.parent.numberOfRegisteredEvents += 1
             for a in eventAlerts:
-                UserAlert(
-                    c.replace_bad_chars_with_underscores(rCache.userCache[a['userId']]['email']),
-                    self, a['alertId'], a['userId'])
+                user = c.replace_bad_chars_with_underscores(rCache.get_user(a['userId'])['email'])
+                UserAlert(user, self, a['alertId'], a['userId'])
     
     def summary(self):
         eventAlerts = rCache.get_alerts_for_event(self.eventName)
@@ -386,11 +386,10 @@ class Event(ConfigNode):
             return completions
 
 
-
 class UserAlert(ConfigNode):
     """Setup the dynamically-named user alert node.
     
-    Path: /events/{EVENT_NAME}/{USER_IDENTIFIER}/
+    Path: /events/{EVENT_NAME}/{USER_EMAIL}/
     """
     
     def __init__(self, userString, parent, alertId, userId):
