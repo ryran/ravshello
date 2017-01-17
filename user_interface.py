@@ -2952,7 +2952,11 @@ class Share(ConfigNode):
         if s.has_key('targetEmail'):
             target = s['targetEmail']
         elif s.has_key('targetCommunityId'):
-            target = "communityID {}".format(s['targetCommunityId'])
+            try:
+                community = rClient.get_community(s['targetCommunityId'])
+                target = "community \"{}\" ({})".format(community['name'], community['type'])
+            except:
+                target = "community {}".format(s['targetCommunityId'])
         else:
             target = "(NULL)"
         # Convert timestamp to date
