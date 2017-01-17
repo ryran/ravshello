@@ -396,9 +396,21 @@ class UserAlert(ConfigNode):
         ConfigNode.__init__(self, userString, parent)
         self.userId = userId
         self.alertId = alertId
+        self.refresh()
     
-    #~ def summary(self):
-        #~ return (get_user(self.userId)['email'], None)
+    def refresh(self):
+        self._timestamp = time()
+        u = rCache.get_user(self.userId)
+        if u:
+            self.status = "{} {}; {}; UID {}".format(
+                u['name'], u['surname'], u['email'], u['id'])
+        else:
+            self.status = None
+    
+    def summary(self):
+        if ui.get_timestamp_proximity(self._timestamp) < -120:
+            self.refresh()
+        return (self.status, None)
     
     def ui_command_unregister(self):
         """
@@ -1034,16 +1046,24 @@ class User(ConfigNode):
         ConfigNode.__init__(self, user, parent)
         self.parent.numberOfUsers += 1
         self.userId = userId
+        self.refresh()
     
-    def summary(self):
+    def refresh(self):
+        self._timestamp = time()
         u = rCache.get_user(self.userId)
         if u['locked'] or not (u['activated'] and u['enabled']):
-            happy = False
+            self.happy = False
         elif 'ADMIN' in u['roles']:
-            happy = True
+            self.happy = True
         else:
-            happy = None
-        return (u['email'], happy)
+            self.happy = None
+        self.status = "{} {}; {}; UID {}".format(
+            u['name'], u['surname'], u['email'], u['id'])
+    
+    def summary(self):
+        if ui.get_timestamp_proximity(self._timestamp) < -120:
+            self.refresh()
+        return (self.status, self.happy)
     
     def ui_command_get_info(self):
         """
