@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright 2015 Ravshello Authors
+# Copyright 2015, 2016, 2017 Ravshello Authors
 # License: Apache License 2.0 (see LICENSE or http://apache.org/licenses/LICENSE-2.0.html)
 
 # Modules from standard library
@@ -179,6 +179,7 @@ class RavelloRoot(ConfigNode):
             Monitoring(self)
             Events(self)
             # Images(self)
+            Shares(self)
         Applications(self)
     
     def summary(self):
@@ -316,7 +317,7 @@ class Event(ConfigNode):
     
     def __init__(self, eventName, parent):
         ConfigNode.__init__(self, eventName, parent)
-        self.parent.numberOfEvents += 1
+        parent.numberOfEvents += 1
         self.eventName = eventName.swapcase()
         self.refresh()
     
@@ -1044,7 +1045,7 @@ class User(ConfigNode):
     
     def __init__(self, user, parent, userId):
         ConfigNode.__init__(self, user, parent)
-        self.parent.numberOfUsers += 1
+        parent.numberOfUsers += 1
         self.userId = userId
         self.refresh()
     
@@ -1407,14 +1408,14 @@ class Bp(ConfigNode):
     """
     def __init__(self, bpName, parent, bp):
         ConfigNode.__init__(self, bpName, parent)
-        self.parent.numberOfBps += 1
+        parent.numberOfBps += 1
         self.bpName = bpName
         self.bpId = bp['id']
         self.bpOwner = bp['owner']
         self.creationTime = datetime.fromtimestamp(int(str(bp['creationTime'])[:-3]))
         if bp.has_key('description') and any(tag in bp['description'] for tag in rOpt.learnerBlueprintTag):
             self.isLearnerBp = True
-            self.parent.numberOfLearnerBps += 1
+            parent.numberOfLearnerBps += 1
         else:
             self.isLearnerBp = False
     
@@ -1702,8 +1703,7 @@ class Applications(ConfigNode):
         
         # Check for available blueprints first
         allowedBlueprints = []
-        blueprints = rClient.get_blueprints()
-        for bp in blueprints:
+        for bp in rCache.get_bps():
             try:
                 description = bp['description']
             except:
@@ -1711,8 +1711,7 @@ class Applications(ConfigNode):
             if is_admin() or any(tag in description for tag in rOpt.learnerBlueprintTag) or '#k:{}'.format(user) in description:
                 allowedBlueprints.append(bp['name'])
         if not allowedBlueprints:
-            print(c.red("\nThere are no blueprints available for you to base an application on!\n"
-                        "Contact an admin like ablum or rsaw"))
+            print(c.red("\nThere are no blueprints available for you to base an application on!\n"))
             return
         
         if blueprint == '@prompt':
@@ -1729,12 +1728,12 @@ class Applications(ConfigNode):
             baseBlueprintName = blueprint
             
         # Quit if invalid blueprint name
-        if baseBlueprintName not in allowedBlueprints or not ui.iterate_json_keys_for_value(blueprints, 'name', baseBlueprintName):
+        if baseBlueprintName not in allowedBlueprints or not ui.iterate_json_keys_for_value(rCache.get_bps(), 'name', baseBlueprintName):
             print(c.RED("\nInvalid blueprint name!\n"))
             return
         
         # Convert blueprint name to id
-        for bp in blueprints:
+        for bp in rCache.get_bps():
             if bp['name'] == baseBlueprintName:
                 baseBlueprintId = bp['id']
                 break
@@ -1808,7 +1807,7 @@ class Applications(ConfigNode):
     def ui_complete_new(self, parameters, text, current_param):
         if current_param == 'blueprint':
             allowedBlueprints = ['@prompt']
-            blueprints = rClient.get_blueprints()
+            blueprints = rCache.get_bps()
             for bp in blueprints:
                 try:
                     description = bp['description']
@@ -1833,7 +1832,7 @@ class Applications(ConfigNode):
                                if a.startswith(text)]
             else:
                 allowedBlueprints = {}
-                blueprints = rClient.get_blueprints()
+                blueprints = rCache.get_bps()
                 for bp in blueprints:
                     try:
                         description = bp['description']
@@ -1870,9 +1869,9 @@ class App(ConfigNode):
     """
     
     def __init__(self, appName, parent, appId):
-        ConfigNode.__init__(self, name, parent)
-        self.parent.numberOfApps += 1
-        self.appName = name
+        ConfigNode.__init__(self, appName, parent)
+        parent.numberOfApps += 1
+        self.appName = appName
         self.appId = appId
         Vms(self)
     
@@ -2734,3 +2733,315 @@ class Vm(ConfigNode):
             raise
         print(c.yellow("\nAPI 'repair' call was sent; check VM status\n"))
         rCache.purge_app_cache(self.appId)
+
+
+class Shares(ConfigNode):
+    """Setup the 'shares' node.
+    
+    Path: /shares/
+    """
+    
+    def __init__(self, parent):
+        ConfigNode.__init__(self, 'shares', parent)
+        self.isPopulated = False
+    
+    def summary(self):
+        if self.isPopulated:
+            return ("{} shares".format(self.numberOfShares), None)
+        else:
+            return ("To populate, run: refresh", False)
+    
+    def refresh(self):
+        self._children = set([])
+        self.numberOfShares = 0
+        for share in rCache.get_shares():
+            Share("{}".format(share['id']), self)
+        self.isPopulated = True
+    
+    def ui_command_refresh(self):
+        """
+        Poll Ravello for list of shared resources.
+        
+        Not doing this automatically speeds startup time.
+        """
+        print(c.yellow("\nRefreshing all shares data . . . "), end='')
+        stdout.flush()
+        self.refresh()
+        print(c.green("DONE!\n"))
+    
+    def _create_share(self, request):
+        try:
+            newShare = rClient.share_resource(request)
+        except:
+            print(c.red("\nProblem creating shared resource!\n"))
+            raise
+        print(c.green("\nShare created with share ID {}!".format(newShare['id'])))
+        rCache.update_share_cache()
+        Share("{}".format(newShare['id']), self)
+        print()
+    
+    def _new_share_helper(self, shareType, resource, email):
+        if shareType == 'blueprint':
+            data = rCache.get_bps()
+            req = {'sharedResourceType': 'BLUEPRINT'}
+        elif shareType == 'VM image':
+            data = rClient.get_images()
+            req = {'sharedResourceType': 'LIBRARY_VM'}
+        elif shareType == 'disk image':
+            data = rClient.get_diskimages()
+            req = {'sharedResourceType': 'DISK_IMAGE'}
+        allowed = []
+        for j in data:
+            allowed.append((j['name'], j['id']))
+        if not allowed:
+            print(c.red("\nThere are no {}s available for you to share!\n".format(shareType)))
+            raise ValueError
+        NAME = ID = None
+        if resource == '@prompt':
+            print(c.BOLD("\n{}s available to you:".format(shareType.title())))
+            for i, r in enumerate(allowed):
+                print("  {})  {}".format(c.cyan(i), r[0]))
+            selection = ui.prompt_for_number(
+                c.CYAN("\nEnter number of {}: ".format(shareType)), endRange=i)
+            NAME = allowed[selection][0]
+            ID = allowed[selection][1]
+        else:
+            NAME = resource
+        # Convert resource name to id if necessary
+        if not ID:
+            for r in allowed:
+                if NAME == r[0]:
+                    ID = r[1]
+                    break
+            else:
+                # Quit if invalid resource name
+                print(c.RED("\nInvalid {} name!\n".format(shareType)))
+                raise ValueError
+        req['sharedResourceId'] = ID
+        if email == '@prompt':
+            a = ''
+            if not len(a):
+                a = raw_input(c.CYAN("\nEnter target email address of user with which you want to share {}: ".format(shareType)))
+            email = a
+        req['targetEmail'] = email
+        self._create_share(req)
+    
+    def ui_command_share_bp(self, blueprint='@prompt', targetEmail='@prompt'):
+        """
+        Create a new shared blueprint record.
+        
+        Optionally specify all parameters on the command-line.
+        """
+        blueprint = self.ui_eval_param(blueprint, 'string', '@prompt')
+        targetEmail = self.ui_eval_param(targetEmail, 'string', '@prompt')
+        self._new_share_helper(shareType='blueprint', resource=blueprint, email=targetEmail)
+    
+    def ui_complete_share_bp(self, parameters, text, current_param):
+        if current_param == 'targetEmail':
+            completions = [a for a in ['@prompt']
+                           if a.startswith(text)]
+        elif current_param == 'blueprint':
+            allowedBlueprints = ['@prompt']
+            for bp in rCache.get_bps():
+                allowedBlueprints.append(bp['name'])
+            completions = [a for a in allowedBlueprints
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
+    
+    def ui_command_share_vm_image(self, image='@prompt', targetEmail='@prompt'):
+        """
+        Create a new shared VM image record.
+        
+        Optionally specify all parameters on the command-line.
+        """
+        image = self.ui_eval_param(image, 'string', '@prompt')
+        targetEmail = self.ui_eval_param(targetEmail, 'string', '@prompt')
+        self._new_share_helper(shareType='VM image', resource=image, email=targetEmail)
+    
+    def ui_complete_share_vm_image(self, parameters, text, current_param):
+        if current_param == 'targetEmail':
+            completions = [a for a in ['@prompt']
+                           if a.startswith(text)]
+        elif current_param == 'image':
+            allowedImages = ['@prompt']
+            for img in rClient.get_images():
+                allowedImages.append(img['name'])
+            completions = [a for a in allowedImages
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
+        
+    def ui_command_share_disk_image(self, image='@prompt', targetEmail='@prompt'):
+        """
+        Create a new shared disk image record.
+        
+        Optionally specify all parameters on the command-line.
+        """
+        image = self.ui_eval_param(image, 'string', '@prompt')
+        targetEmail = self.ui_eval_param(targetEmail, 'string', '@prompt')
+        self._new_share_helper(shareType='disk image', resource=image, email=targetEmail)
+    
+    def ui_complete_share_disk_image(self, parameters, text, current_param):
+        if current_param == 'targetEmail':
+            completions = [a for a in ['@prompt']
+                           if a.startswith(text)]
+        elif current_param == 'image':
+            allowedImages = ['@prompt']
+            for img in rClient.get_diskimages():
+                allowedImages.append(img['name'])
+            completions = [a for a in allowedImages
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
+
+
+class Share(ConfigNode):
+    """Setup the dynamically-named share node.
+    
+    Path: /shares/{ID}/
+    """
+    
+    def __init__(self, shareId, parent):
+        ConfigNode.__init__(self, shareId, parent)
+        parent.numberOfShares += 1
+        self.shareId = shareId
+        self.sharedResourceTypeShortener = {
+            'BLUEPRINT': 'BP',
+            'LIBRARY_VM': 'VM',
+            'DISK_IMAGE': 'DISK',
+            }
+        self.refresh()
+    
+    def refresh(self):
+        self._timestamp = time()
+        s = rCache.get_share(self.shareId)
+        # Shorten the resourceType
+        resourceType = self.sharedResourceTypeShortener[s['sharedResourceType']]
+        # Translate resource ID into a name
+        resId = s['sharedResourceId']
+        if resourceType in 'BP':
+            j = rCache.get_bp(resId)
+        elif resourceType in 'VM':
+            j = rClient.get_image(resId)
+        elif resourceType in 'DISK':
+            j = rClient.get_diskimage(resId)
+        if j and j.has_key('name'):
+            resource = "\"{}\"".format(j['name'])
+        else:
+            resource = "ID {}".format(resId)
+        # Convert sharingUserId to username
+        u = rCache.get_user(int(s['sharingUserId']))
+        if u:
+            user = u['username']
+        else:
+            user = "UID {}".format(s['sharingUserId'])
+        # Convert the targetEmail/communityId to a string
+        if s.has_key('targetEmail'):
+            target = s['targetEmail']
+        elif s.has_key('targetCommunityId'):
+            target = "communityID {}".format(s['targetCommunityId'])
+        else:
+            target = "(NULL)"
+        # Convert timestamp to date
+        date = ui.convert_ts_to_date(s['time'], showHours=False)
+        # Compose it all together
+        self.status = "{resourceType} {resource}; {user} -> {target} on {date}".format(
+            resourceType=resourceType,
+            resource=resource,
+            user=user,
+            target=target,
+            date=date)
+    
+    def summary(self):
+        if ui.get_timestamp_proximity(self._timestamp) < -120:
+            self.refresh()
+        return (self.status, None)
+    
+    def print_def(self):
+        pager("JSON definition for SHARE '{}'\n".format(self.shareId) +
+              ui.prettify_json(rCache.get_share(self.shareId)))
+    
+    def ui_command_print_def(self, outputFile='@pager'):
+        """
+        Pretty-print share JSON in pager or export to outputFile.
+        
+        Optionally specify *outputFile* as a relative or absolute path on the
+        local system (tab-completion available).
+        """
+        print()
+        outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
+        if outputFile == '@pager':
+            self.print_def()
+        else:
+            try:
+                ui.prepare_file_for_writing(outputFile)
+            except:
+                return
+            try:
+                with open(outputFile, 'w') as f:
+                    json.dump(rCache.get_share(self.shareId), f, indent=4)
+            except IOError as e:
+                print(c.RED("Problem writing share definition for '{}'\n"
+                            "{}\n".format(self.shareId, e)))
+                return
+            print(c.green("Exported share definition to file: '{}'\n".format(outputFile)))
+    
+    def ui_complete_print_def(self, parameters, text, current_param):
+        if current_param != 'outputFile':
+            return []
+        completions = complete_path(text, S_ISREG)
+        if len(completions) == 1 and not completions[0].endswith('/'):
+            completions = [completions[0] + ' ']
+        return completions
+    
+    def delete(self):
+        try:
+            rClient.delete_share(self.shareId)
+        except:
+            print(c.red("Problem deleting share!\n"))
+            raise
+        rCache.purge_share_cache(self.shareId)
+        self.parent.numberOfShares -= 1
+        print(c.green("Deleted share {}\n".format(self.shareId)))
+        self.parent.remove_child(self)
+    
+    def ui_command_delete(self, noconfirm='false'):
+        """
+        Delete a share.
+        
+        By default, confirmation will be required to delete the share.
+        Disable prompt with noconfirm=true.
+        """
+        noconfirm = self.ui_eval_param(noconfirm, 'bool', False)
+        print()
+        if not noconfirm:
+            response = raw_input(c.CYAN("Continue with share deletion? [y/N] "))
+            print()
+        if noconfirm or response == 'y':
+            self.delete()
+        else:
+            print("Leaving share intact\n")
+    
+    def ui_complete_delete(self, parameters, text, current_param):
+        if current_param in ['noconfirm']:
+            completions = [a for a in ['false', 'true']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions

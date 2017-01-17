@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-# Copyright 2015 Ravshello Authors
+# Copyright 2015, 2016, 2017 Ravshello Authors
 # License: Apache License 2.0 (see LICENSE or http://apache.org/licenses/LICENSE-2.0.html)
 
 # Modules from standard library
 from __future__ import print_function
 from getpass import getpass
-from datetime import date
+from datetime import datetime, date
 from os import path, makedirs, chmod, remove
 from time import time
 from sys import stdout
@@ -66,7 +66,7 @@ def save_str_to_file(outfile, string, perms=0600):
         pass
 
 
-def prompt_for_number(prompt, endRange=None, startRange=0, defaultNumber=None):
+def prompt_for_number(prompt, endRange=None, startRange=0, defaultNumber=None, numberList=None):
     """Prompt for & require a positive natural number or a number in a range."""
     while 1:
         try:
@@ -78,7 +78,10 @@ def prompt_for_number(prompt, endRange=None, startRange=0, defaultNumber=None):
                     n = int(n)
                 else:
                     n = int(defaultNumber)
-            if endRange is None:
+            if numberList:
+                if n in numberList:
+                    break
+            elif endRange is None:
                 if n > 0:
                     break
             else:
@@ -136,6 +139,41 @@ def get_timestamp_proximity(timeStamp, now=None):
     if not isinstance(now, float):
         now = sanitize_timestamp(now)
     return int(round(timeStamp - now))
+
+
+def convert_ts_to_date(ts, showHours=True):
+    """Convert a timestamp into absolute date string."""
+    if not isinstance(ts, float):
+        ts = sanitize_timestamp(ts)
+    diff = ts - time()
+    m, s = divmod(ts - time(), 60)
+    expireDateTime = datetime.fromtimestamp(ts)
+    if showHours:
+        d = expireDateTime.strftime('%Y/%m/%d @ %H:%M')
+    else:
+        d = expireDateTime.strftime('%Y/%m/%d')
+    return d
+
+
+def expand_secs_to_ywdhms(seconds):
+    seconds = int(seconds)
+    intervals = (
+        ('yrs',  31536000), # 60 * 60 * 24 * 365
+        ('wks',  604800),   # 60 * 60 * 24 * 7
+        ('days', 86400),    # 60 * 60 * 24
+        ('hrs',  3600),     # 60 * 60
+        ('mins', 60),
+        ('secs', 1),
+        )
+    result = []
+    for unit, count in intervals:
+        value = seconds // count
+        if value:
+            seconds -= value * count
+            if value == 1:
+                unit = unit.rstrip('s')
+            result.append("{} {}".format(value, unit))
+    return ', '.join(result)
 
 
 class RavelloCache(object):
