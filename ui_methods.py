@@ -177,17 +177,17 @@ class RavelloCache(object):
         return self.appCache[appId]['definition']
     
     def update_user_cache(self):
+        self._userCache_tstamp = time()
         self.userCache = {}
         for u in self.r.get_users():
             self.userCache[u['id']] = u
-        self.userCache['_timestamp'] = time()
     
     def purge_user_cache(self):
         self.userCache = {}
     
-    def get_user(self, userId='X'):
+    def get_user(self, userId):
         try:
-            ts = self.userCache['_timestamp']
+            ts = self._userCache_tstamp
         except:
             self.update_user_cache()
         else:
@@ -197,6 +197,16 @@ class RavelloCache(object):
             return self.userCache[userId]
         else:
             return None
+    
+    def get_users(self):
+        try:
+            ts = self._userCache_tstamp
+        except:
+            self.update_user_cache()
+        else:
+            if get_timestamp_proximity(ts) < -120:
+                self.update_user_cache()
+        return self.userCache.values()
     
     def update_alert_cache(self):
         self.alertCache = {}

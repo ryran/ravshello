@@ -984,14 +984,10 @@ class Users(ConfigNode):
     def refresh(self):
         self._children = set([])
         self.numberOfUsers = self.numberOfAdmins = 0
-        rCache.update_user_cache()
-        for userId in rCache.userCache:
-            if not userId == '_timestamp':
-                User(c.replace_bad_chars_with_underscores(rCache.userCache[userId]['email']),
-                    self, userId)
-                self.numberOfUsers += 1
-                if 'ADMIN' in rCache.userCache[userId]['roles']:
-                    self.numberOfAdmins += 1
+        for user in rCache.get_users():
+            User(c.replace_bad_chars_with_underscores(user['email']), self, user['id'])
+            if 'ADMIN' in user['roles']:
+                self.numberOfAdmins += 1
         self.isPopulated = True
     
     def ui_command_refresh(self):
@@ -1025,7 +1021,6 @@ class Users(ConfigNode):
         except:
             print(c.red("Problem inviting user\n!"))
             raise
-        self.numberOfUsers += 1
         print(c.green("Invited user {}\n".format(req['email'])))
         User("%s" % user['email'], self, user['id'])
 
@@ -1038,6 +1033,7 @@ class User(ConfigNode):
     
     def __init__(self, user, parent, userId):
         ConfigNode.__init__(self, user, parent)
+        self.parent.numberOfUsers += 1
         self.userId = userId
     
     def summary(self):
@@ -1133,7 +1129,6 @@ class User(ConfigNode):
             self.parent.remove_child(self)
         else:
             print("Leaving user intact (probably a good choice)\n")
-    
     
     def ui_command_change_password(self):
         """
