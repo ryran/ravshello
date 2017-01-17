@@ -1041,12 +1041,14 @@ class User(ConfigNode):
         self.userId = userId
     
     def summary(self):
-        user = rCache.get_user(self.userId)
-        if 'ADMIN' in user['roles']:
-            r = True
+        u = rCache.get_user(self.userId)
+        if u['locked'] or not (u['activated'] and u['enabled']):
+            happy = False
+        elif 'ADMIN' in u['roles']:
+            happy = True
         else:
-            r = None
-        return (user['email'], r)
+            happy = None
+        return (u['email'], happy)
     
     def ui_command_get_info(self):
         """
