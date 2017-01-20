@@ -1915,11 +1915,11 @@ class App(ConfigNode):
         print(c.BOLD("    /apps/{}/ publish\n".format(self.appName)))
     
     def confirm_app_is_published(self):
-        rCache.update_app_cache(self.appId)
-        if not rCache.get_app(self.appId)['published']:
+        if rClient.is_application_published(self.appId)['value']:
+            return True
+        else:
             self.print_message_app_not_published()
             return False
-        return True
     
     def ui_command_update_note(self, note='@prompt'):
         """
