@@ -26,6 +26,7 @@ import re
 
 # Custom modules
 import string_ops
+import ui_methods
 try:
     import ravello_sdk
     ravello_sdk.is_rsaw_sdk()
@@ -62,10 +63,11 @@ def get_passphrase(prompt="Enter passphrase: ", defaultPass=None):
 c = string_ops.Printer()
 print(c.magenta("Note, you should import with: from rav_debugsh import *"))
 print(c.cyan("Assuming that, get started by running:"))
-print(c.CYAN("    r,c = start()"))
+print(c.CYAN("    r,R,c = start()"))
 
 def start():
     r = ravello_sdk.RavelloClient()
+    R = ui_methods.RavelloCache(r)
     try:
         with open(os.path.expanduser('~/.ravshello/config.yaml')) as f:
             cfg = yaml.safe_load(f)
@@ -88,10 +90,11 @@ def start():
     else:
         print(c.GREEN("Logged in to Ravello as {}\n".format(user)))
         print(c.green("r: {}\n".format(r)))
+        print(c.green("R: {}\n".format(R)))
         print(c.green("c: {}\n".format(c)))
         print(c.green(inspect.getsource(a)))
         print(c.green(inspect.getsource(A)))
-    return (r, c)
+    return r, R, c
 
 def a(jsonInput):
     print(json.dumps(jsonInput, indent=4))
