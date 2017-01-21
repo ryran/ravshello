@@ -25,18 +25,22 @@ import sys
 
 # Custom modules
 from modules import string_ops as c
+from modules import ravello_cache
 from modules import auth_local, auth_ravello, user_interface, cfg
-
 
 def main():
     """Parse cmdline args, configure prefs, login, and start captive UI."""
-    
     # Setup parser
     description = ("Interface with Ravello Systems to create & manage apps "
                    "hosted around the world")
-    epilog = ("Version info: {}\n"
-              "To report bugs/RFEs: github.com/ryran/ravshello/issues "
-              "or rsaw@redhat.com").format(cfg.version)
+    epilog = ("ENVIRONMENT VARIABLES:\n"
+              "  Various printing commands in {} make use of the RAVSH_EDITOR variable\n"
+              "  if it is present, falling back to the EDITOR variable. If that's empty, the\n"
+              "  fall-back process is to use: gvim, vim, and finally less.\n\n"
+              "VERSION:\n"
+              "  {}\n"
+              "  Report bugs/RFEs/feedback at https://github.com/ryran/ravshello/issues"
+              .format(cfg.prog, cfg.version))
     p = argparse.ArgumentParser(
         prog=cfg.prog, description=description, add_help=False, epilog=epilog,
         formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -163,6 +167,7 @@ def main():
     
     # 2.) Use ravello_sdk.RavelloClient() object to log in to Ravello
     cfg.rClient = auth_ravello.login()
+    cfg.rCache = ravello_cache.RavelloCache(cfg.rClient)
     
     # 3.) Launch the main configShell user interface
     #     It will read options and objects from the cfg module

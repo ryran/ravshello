@@ -28,7 +28,7 @@ import re
 
 # Custom modules
 from modules import string_ops as c
-from modules import ui_methods, cfg
+from modules import ui_methods, cfg, ravello_cache
 try:
     from modules import ravello_sdk
     ravello_sdk.is_rsaw_sdk()
@@ -68,7 +68,7 @@ print(c.CYAN("    r,R,c = go()"))
 
 def go():
     r = ravello_sdk.RavelloClient()
-    R = ui_methods.RavelloCache(r)
+    R = ravello_cache.RavelloCache(r)
     defaultCfgFile = os.path.join(cfg.defaultUserCfgDir, cfg.defaultUserCfgFile)
     try:
         with open(os.path.expanduser(defaultCfgFile)) as f:

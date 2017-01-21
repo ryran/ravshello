@@ -32,7 +32,7 @@ del ConfigNode.ui_command_bookmarks
 del ConfigNode.ui_complete_bookmarks
 
 # Custom modules
-from . import cfg
+from . import cfg, ravello_cache
 from . import string_ops as c
 from . import ui_methods as ui
 try:
@@ -46,7 +46,6 @@ except:
 # Set aside globals that will be used for code-clarity
 rOpt = user = appnamePrefix = rClient = rCache = None
 
-
 def is_admin():
     if rOpt.enableAdminFuncs:
         return True
@@ -54,7 +53,7 @@ def is_admin():
         return False
 
 
-def complete_path(path, stat_fn):
+def _complete_path(path, stat_fn):
     """Return filenames to ui_complete_*() meths for path completion.
     
     Taken from targetcli's ui_backstore module.
@@ -70,6 +69,14 @@ def complete_path(path, stat_fn):
     return sorted(filtered,
                   key=lambda s: '~'+s if s.endswith('/') else s)
 
+def _complete_print_obj(parameters, text, current_param):
+    """For ui_complete_*() meths that only support standard 'outputFile=' arg."""
+    if current_param != 'outputFile':
+        return []
+    completions = _complete_path(text, S_ISREG)
+    if len(completions) == 1 and not completions[0].endswith('/'):
+        completions = [completions[0] + ' ']
+    return completions
 
 def get_num_learner_active_vms(learner):
     """Return the number of active VMs a learner has."""
@@ -90,7 +97,7 @@ def main():
     user = cfg.user
     appnamePrefix = 'k:{}__'.format(user)
     rClient = cfg.rClient
-    rCache = ui.RavelloCache(rClient)
+    rCache = cfg.rCache
     # Clear preferences if asked via cmdline arg
     if rOpt.clearPreferences:
         remove(path.join(rOpt.userCfgDir, 'prefs.bin'))
@@ -227,83 +234,49 @@ class Events(ConfigNode):
         pager("JSON list of EVENT NAMES\n" +
               ui.prettify_json(rClient.get_events()))
     
-    def ui_command_print_event_names(self, outputFile='@pager'):
+    def ui_command_print_event_names(self, outputFile='@EDITOR'):
         """
         Pretty-print JSON list of Ravello event names.
         
-        Optionally specify *outputFile* as a relative or absolute path on the
-        local system; otherwise output will be piped to pager.
+        Optionally specify *outputFile* as @term or @pager or as a relative /
+        absolute path on the local system (tab-completion available). Default
+        value of '@EDITOR' checks environment for a RAVSH_EDITOR variable, and
+        failing that, EDITOR, and failing that, it falls back to gvim, then
+        vim, then less.
         
         Alerts can be registered for any of the returned event names with the
         register command.
         """
         print()
-        outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
-        if outputFile == '@pager':
-            self.print_event_names()
-        else:
-            try:
-                ui.prepare_file_for_writing(outputFile)
-            except:
-                return
-            try:
-                with open(outputFile, 'w') as f:
-                    json.dump(rClient.get_events(), f, indent=4)
-            except IOError as e:
-                print(c.RED("Problem writing event names\n"
-                            "  {}\n".format(e)))
-                return
-            print(c.green("Exported event names to file: '{}'\n".format(outputFile)))
+        outputFile = self.ui_eval_param(outputFile, 'string', '@EDITOR')
+        description = "list of event names"
+        ui.print_obj(rClient.get_events(), description, outputFile, tmpPrefix='events')
     
     def ui_complete_print_event_names(self, parameters, text, current_param):
-        if current_param != 'outputFile':
-            return []
-        completions = complete_path(text, S_ISREG)
-        if len(completions) == 1 and not completions[0].endswith('/'):
-            completions = [completions[0] + ' ']
-        return completions
+        return _complete_print_obj(parameters, text, current_param)
     
-    def print_registered_alerts(self):
-        pager("JSON list of REGISTERED USER ALERTS\n" +
-              ui.prettify_json(rClient.get_alerts()))
-    
-    def ui_command_print_registered_alerts(self, outputFile='@pager'):
+    def ui_command_print_registered_alerts(self, outputFile='@EDITOR'):
         """
-        Pretty-print JSON list of userAlerts registered.
+        Pretty-print JSON list of registered userAlerts.
         
         Assuming the current Ravello user is an admin, they will actually see
         all alerts in the organization.
         
-        Optionally specify *outputFile* as a relative or absolute path on the
-        local system.
+        Optionally specify *outputFile* as @term or @pager or as a relative /
+        absolute path on the local system (tab-completion available). Default
+        value of '@EDITOR' checks environment for a RAVSH_EDITOR variable, and
+        failing that, EDITOR, and failing that, it falls back to gvim, then
+        vim, then less.
         
         Create alerts with the register command.
         """
         print()
-        outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
-        if outputFile == '@pager':
-            self.print_registered_alerts()
-        else:
-            try:
-                ui.prepare_file_for_writing(outputFile)
-            except:
-                return
-            try:
-                with open(outputFile, 'w') as f:
-                    json.dump(rClient.get_alerts(), f, indent=4)
-            except IOError as e:
-                print(c.RED("Problem writing userAlerts\n"
-                            "  {}\n".format(e)))
-                return
-            print(c.green("Exported userAlerts to file: '{}'\n".format(outputFile)))
+        outputFile = self.ui_eval_param(outputFile, 'string', '@EDITOR')
+        description = "list of registered userAlerts"
+        ui.print_obj(rClient.get_alerts(), description, outputFile, tmpPrefix='alerts')
     
     def ui_complete_print_registered_alerts(self, parameters, text, current_param):
-        if current_param != 'outputFile':
-            return []
-        completions = complete_path(text, S_ISREG)
-        if len(completions) == 1 and not completions[0].endswith('/'):
-            completions = [completions[0] + ' ']
-        return completions
+        return _complete_print_obj(parameters, text, current_param)
 
 
 class Event(ConfigNode):
@@ -464,12 +437,15 @@ class Monitoring(ConfigNode):
     
     def ui_command_search_notifications(self, appId=None, maxResults=500,
             notificationLevel=None, startTime=None, endTime=None,
-            outputFile='@pager'):
+            outputFile='@EDITOR'):
         """
         Pretty-print JSON list of notification search results.
         
-        Optionally specify outputFile as a relative or absolute path on the
-        local system; otherwise output is piped to pager.
+        Optionally specify *outputFile* as @term or @pager or as a relative /
+        absolute path on the local system (tab-completion available). Default
+        value of '@EDITOR' checks environment for a RAVSH_EDITOR variable, and
+        failing that, EDITOR, and failing that, it falls back to gvim, then
+        vim, then less.
         
         Results will be returned in reverse chronological order with
         newest matches at the top.
@@ -496,9 +472,10 @@ class Monitoring(ConfigNode):
         This function compensates for you by appending 3 zeroes to the end of any
         number you pass (so basically, don't worry about it).
         """
+        #### FIXME: This could be made waaaaay more friendly and useful.
         print()
         maxResults = self.ui_eval_param(maxResults, 'number', 500)
-        outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
+        outputFile = self.ui_eval_param(outputFile, 'string', '@EDITOR')
         #~ appId = self.ui_eval_param(appId, 'number', None)
         #~ notificationLevel = self.ui_eval_param(notificationLevel, 'string', 'INFO')
         if isinstance(startTime, int): startTime=int(str(startTime) + '000')
@@ -506,23 +483,11 @@ class Monitoring(ConfigNode):
         req = {'maxResults': maxResults, 'appId': appId,
                'notificationLevel': notificationLevel,
                'dateRange': {'startTime': startTime, 'endTime': endTime}}
-
-        if outputFile == '@pager':
-            pager("NOTIFICATION SEARCH RESULTS\n" +
-                  ui.prettify_json(rClient.search_notifications(req)))
-        else:
-            try:
-                ui.prepare_file_for_writing(outputFile)
-            except:
-                return
-            try:
-                with open(outputFile, 'w') as f:
-                    json.dump(rClient.search_notifications(req), f, indent=4)
-            except IOError as e:
-                print(c.RED("Problem writing notification search results\n"
-                            "  {}\n".format(e)))
-                return
-            print(c.green("Exported notification search results to file: '{}'\n".format(outputFile)))
+        description = "list of notification search results"
+        ui.print_obj(rClient.search_notifications(req), description, outputFile,
+            tmpPrefix='notifications')
+    
+    # FIXME: Add ui_complete_search_notifications()
 
 
 class Billing(ConfigNode):
@@ -555,15 +520,13 @@ class Billing(ConfigNode):
                     x = ui.monthdelta(date.today(), month)
                     month = x.month
                     year = x.year
-                else:
-                    j = month_name[month]
             except:
                 print(c.RED("Invalid month specification!\n"))
                 raise
         return month, year
     
     def ui_command_inspect_all_charges(self, month='@prompt',
-            year=date.today().year, outputFile='@pager'):
+            year=date.today().year, outputFile='@EDITOR'):
         """
         Print full JSON for all charges in a specific month.
         
@@ -574,47 +537,34 @@ class Billing(ConfigNode):
         
         The *year* can only be specified as an absolute (positive) number.
         
-        Optionally specify *outputFile* as a relative or absolute path on the
-        local system.
+        Optionally specify *outputFile* as @term or @pager or as a relative /
+        absolute path on the local system (tab-completion available). Default
+        value of '@EDITOR' checks environment for a RAVSH_EDITOR variable, and
+        failing that, EDITOR, and failing that, it falls back to gvim, then
+        vim, then less.
         """
         print()
         month = self.ui_eval_param(month, 'string', '@prompt')
-        outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
+        outputFile = self.ui_eval_param(outputFile, 'string', '@EDITOR')
         year = self.ui_eval_param(year, 'number', date.today().year)
         try:
             month, year = self.validate_or_prompt_for_month(month, year)
         except:
             return
-            
-        print(c.yellow("Pulling summary of charges for {}-{} . . .\n"
-                       .format(year, month_name[month])))
+        when = "{}-{}".format(year, month_name[month][:3])
+        print(c.yellow("Pulling summary of charges for {} . . .\n".format(when)))
         try:
-            b = rClient.get_billing_for_month(year, month)
+            billing = rClient.get_billing_for_month(year, month)
         except:
             print(c.red("Problem getting billing info!\n"))
             raise
-        
-        if outputFile == '@pager':
-            pager("Full details of charges incurred for all apps since beginning of the month\n" +
-                  ui.prettify_json(b))
-        else:
-            try:
-                ui.prepare_file_for_writing(outputFile)
-            except:
-                return
-            try:
-                with open(outputFile, 'w') as f:
-                    json.dump(b, f, indent=4)
-            except IOError as e:
-                print(c.RED("Problem writing billing information!\n"
-                            "  {}\n".format(e)))
-                return
-            print(c.green("Wrote billing information to file: '{}'".format(outputFile)))
-        print()
+        description = "details of all charges incurred during month {}".format(when)
+        ui.print_obj(billing, description, outputFile,
+            tmpPrefix='billing={}'.format(month_name[month][:3]))
     
     def _complete_file_month_year(self, parameters, text, current_param):
         if current_param == 'outputFile':
-            completions = complete_path(text, S_ISREG)
+            completions = _complete_path(text, S_ISREG)
             if len(completions) == 1 and not completions[0].endswith('/'):
                 completions = [completions[0] + ' ']
             return completions
@@ -648,7 +598,7 @@ class Billing(ConfigNode):
             return completions
     
     def ui_command_export_month_to_csv(self, month='@prompt',
-            year=date.today().year, sortBy='nick', outputFile='@term'):
+            year=date.today().year, sortBy='nick', outputFile='@EDITOR'):
         """
         Export per-app details of a particular month in CSV format.
         
@@ -662,12 +612,14 @@ class Billing(ConfigNode):
         With *sortBy*, charges can be sorted by Ravello user login ('user') or
         ravshello nickname ('nick').
         
-        Optionally specify *outputFile* as @pager or as a relative / absolute
-        path on the local system.
+        Optionally specify *outputFile* as @term or @pager or as a relative /
+        absolute path on the local system (tab-completion available). Default
+        value of '@EDITOR' checks environment for a RAVSH_EDITOR variable, and
+        failing that, EDITOR, and failing that, it falls back to gvim, then
+        vim, then less.
         """
-        
         print()
-        outputFile = self.ui_eval_param(outputFile, 'string', '@term')
+        outputFile = self.ui_eval_param(outputFile, 'string', '@EDITOR')
         month = self.ui_eval_param(month, 'string', '@prompt')
         year = self.ui_eval_param(year, 'number', date.today().year)
         try:
@@ -678,32 +630,17 @@ class Billing(ConfigNode):
         if not sortBy == 'user' and not sortBy == 'nick':
             print(c.RED("Specify sortBy as 'user' or 'nick'\n"))
             return
-        print(c.yellow("Pulling summary of charges for {}-{} . . .\n"
-                       .format(year, month_name[month])))
+        when = "{}-{}".format(year, month_name[month][:3])
+        print(c.yellow("Pulling summary of charges for {} . . .\n".format(when)))
         try:
-            b = rClient.get_billing_for_month(year, month)
+            billing = rClient.get_billing_for_month(year, month)
         except:
             print(c.red("Problem getting billing info!\n"))
             raise
         csv = self.gen_csv(b, sortBy)
-        if outputFile == '@term':
-            print(csv)
-        elif outputFile == '@pager':
-            pager(csv)
-        else:
-            try:
-                ui.prepare_file_for_writing(outputFile)
-            except:
-                return
-            try:
-                with open(outputFile, 'w') as f:
-                    f.write(csv)
-            except IOError as e:
-                print(c.RED("Problem writing billing information!\n"
-                            "  {}\n".format(e)))
-                return
-            print(c.green("Wrote billing information as CSV to file: '{}'".format(outputFile)))
-        print()
+        description = "CSV details of all charges incurred during month {}".format(when)
+        ui.print_obj(billing, description, outputFile,
+            tmpPrefix='billing={}'.format(month_name[month][:3]), suffix='.csv')
     
     def ui_complete_export_month_to_csv(self, parameters, text, current_param):
         return self._complete_file_month_year_sortby(parameters, text, current_param)
@@ -715,8 +652,9 @@ class Billing(ConfigNode):
         With *sortBy*, charges can be sorted by Ravello user login ('user') or
         ravshello nickname ('nick').
         
-        Optionally specify *outputFile* as @term or as a relative / absolute
-        path on the local system.
+        Optionally specify *outputFile* as @term or @EDITOR or as a relative /
+        absolute path on the local system (tab-completion available). When
+        writing out to files, it might be helpful to use ravshello --nocolor.
         """
         print()
         outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
@@ -727,32 +665,18 @@ class Billing(ConfigNode):
         print("Warning: data could be up to 1 hour old")
         print(c.yellow("Pulling summary of charges since the start of this month . . .\n"))
         try:
-            b = rClient.get_billing()
+            billing = rClient.get_billing()
         except:
             print(c.red("Problem getting billing info!\n"))
             raise
-        txt = self.gen_txt_summary(b, sortBy)
-        if outputFile == '@term':
-            print(txt)
-        elif outputFile == '@pager':
-            pipepager(txt, cmd='less -R')
-        else:
-            try:
-                ui.prepare_file_for_writing(outputFile)
-            except:
-                return
-            try:
-                with open(outputFile, 'w') as f:
-                    f.write(txt)
-            except IOError as e:
-                print(c.RED("Problem writing billing information!\n"
-                            "  {}\n".format(e)))
-                return
-            print(c.green("Wrote billing information to file: '{}'\n".format(outputFile)))
+        txt = self.gen_txt_summary(billing, sortBy)
+        description = "billing summary of charges incurred since the start of this month"
+        ui.print_obj(txt, description, outputFile,
+            tmpPrefix='billing=thismonth', suffix='.txt')
     
     def ui_complete_this_months_summary(self, parameters, text, current_param):
         if current_param == 'outputFile':
-            completions = complete_path(text, S_ISREG)
+            completions = _complete_path(text, S_ISREG)
             if len(completions) == 1 and not completions[0].endswith('/'):
                 completions = [completions[0] + ' ']
             return completions
@@ -780,8 +704,9 @@ class Billing(ConfigNode):
         With *sortBy*, charges can be sorted by Ravello user login ('user') or
         ravshello nickname ('nick').
         
-        Optionally specify *outputFile* as @term or as a relative / absolute
-        path on the local system.
+        Optionally specify *outputFile* as @term or @EDITOR or as a relative /
+        absolute path on the local system (tab-completion available). When
+        writing out to files, it might be helpful to use ravshello --nocolor.
         """
         print()
         outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
@@ -795,31 +720,17 @@ class Billing(ConfigNode):
             month, year = self.validate_or_prompt_for_month(month, year)
         except:
             return
-        print(c.yellow("Pulling summary of charges for {}-{} . . .\n"
-                       .format(year, month_name[month])))
+        when = "{}-{}".format(year, month_name[month][:3])
+        print(c.yellow("Pulling summary of charges for {} . . .\n".format(when)))
         try:
-            b = rClient.get_billing_for_month(year, month)
+            billing = rClient.get_billing_for_month(year, month)
         except:
             print(c.red("Problem getting billing info!\n"))
             raise
-        txt = self.gen_txt_summary(b, sortBy)
-        if outputFile == '@term':
-            print(txt)
-        elif outputFile == '@pager':
-            pipepager(txt, cmd='less -R')
-        else:
-            try:
-                ui.prepare_file_for_writing(outputFile)
-            except:
-                return
-            try:
-                with open(outputFile, 'w') as f:
-                    f.write(txt)
-            except IOError as e:
-                print(c.RED("Problem writing billing information!\n"
-                            "  {}\n".format(e)))
-                return
-            print(c.green("Wrote billing information to file: '{}'\n".format(outputFile)))
+        txt = self.gen_txt_summary(billing, sortBy)
+        description = "billing summary of charges incurred during month {}".format(when)
+        ui.print_obj(txt, description, outputFile,
+            tmpPrefix='billing={}'.format(month_name[month][:3]), suffix='.txt')
     
     def ui_complete_select_month_summary(self, parameters, text, current_param):
         return self._complete_file_month_year_sortby(parameters, text, current_param)
@@ -839,7 +750,7 @@ class Billing(ConfigNode):
             try:
                 upTime = app['upTime']
             except:
-                upTime = "UNDEFINED"
+                upTime = None
             if sortBy == 'nick':
                 if appName.startswith('k:'):
                     user, appName = appName.split('__', 1)
@@ -853,13 +764,13 @@ class Billing(ConfigNode):
                     user = "ORG (not associated with specific apps)"
             if user not in appsByUser:
                 appsByUser[user] = []
-            totalCharges = 0
-            hours = 0
+            totalCharges = 0.0
+            unitHours = 0.0
             for product in app['charges']:
                 try:
                     m = re.search('hour', product['unitName'], re.IGNORECASE)
                     if m:
-                        hours += product['productCount']
+                        unitHours += product['productCount']
                 except:
                     pass
                 try:
@@ -869,18 +780,20 @@ class Billing(ConfigNode):
                 prodName = product['productName'].replace('Performance Opt', 'Perf-Opt').replace('Cost Opt', 'Cost-Opt')
                 if prodName not in chargesByProduct:
                     chargesByProduct[prodName] = {
-                        'summaryPrice': 0,
+                        'summaryPrice': 0.0,
+                        'productCount': 0.0,
                         'productRate': product['productRate'],
                         'unitName': product['unitName'],
                         }
                 chargesByProduct[prodName]['summaryPrice'] += product['summaryPrice']
+                chargesByProduct[prodName]['productCount'] += product['productCount']
             try:
                 creationTime = int(str(app['creationTime'])[:-3])
             except:
                 creationTime = 0
             appsByUser[user].append({
                 'appName': appName,
-                'unitHours': hours,
+                'unitHours': unitHours,
                 'upTime': upTime,
                 'totalCharges': totalCharges,
                 'creationTime': creationTime,
@@ -905,13 +818,13 @@ class Billing(ConfigNode):
         appsByUser, chargesByProduct = self._process_billing_input(monthsCharges, sortBy)
         acctGrandTotal = 0
         for user in appsByUser:
-            userTotalHours = 0
-            userGrandTotal = 0
+            userTotalHoursUptime = 0
+            userGrandTotalCharges = 0.0
             out.append(c.BLUE("{}:".format(user)))
             out.append(c.magenta("    Charges\tHours\tCreation Time\tApplication Name"))
             for app in sorted(appsByUser[user], key=itemgetter('creationTime')):
                 tc = app['totalCharges']
-                userGrandTotal += tc
+                userGrandTotalCharges += tc
                 if tc < 5:
                     tc = c.green("${:8.2f}".format(tc))
                 elif tc < 15:
@@ -927,49 +840,49 @@ class Billing(ConfigNode):
                 else:
                     creationTime = datetime.fromtimestamp(
                         app['creationTime']).strftime('%m/%d @ %H:%M')
-                userTotalHours += app['appHours']
-                if not app['appHours']:
-                    hours = "N/A"
+                if app['upTime'] is not None:
+                    userTotalHoursUptime += app['upTime']
+                    upTime = "{}".format(app['upTime'])
                 else:
-                    hours = "{:g}".format(app['appHours'])
+                    upTime = "N/A"
                 out.append("    {}\t{}\t{}\t{}"
-                           .format(tc, hours, creationTime, app['appName']))
-            acctGrandTotal += userGrandTotal
-            if not app['totalCharges'] == userGrandTotal:
+                           .format(tc, upTime, creationTime, app['appName']))
+            acctGrandTotal += userGrandTotalCharges
+            if not app['totalCharges'] == userGrandTotalCharges:
                 out.append("    -----------------")
                 out.append("    " +
                            c.REVERSE("${:8.2f}\t{:g}"
-                                     .format(userGrandTotal, userTotalHours)))
+                                     .format(userGrandTotalCharges, userTotalHoursUptime)))
             out.append("")
         prodGrandTotal = 0
         out.append("")
         out.append(c.BLUE("Charges by product:"))
-        out.append(c.magenta("    Charges\tUnit Price\tCount\tProduct Name"))
+        out.append(c.magenta("    Charges      Unit Price                Count           Product Name"))
         for product in sorted(chargesByProduct):
             tc = chargesByProduct[product]['summaryPrice']
             prodGrandTotal += tc
             if tc < 15:
-                tc = c.green("${:8.2f}".format(tc))
+                tc = c.green("${:9.2f}".format(tc))
             elif tc < 50:
-                tc = c.yellow("${:8.2f}".format(tc))
+                tc = c.yellow("${:9.2f}".format(tc))
             elif tc < 90:
-                tc = c.YELLOW("${:8.2f}".format(tc))
+                tc = c.YELLOW("${:9.2f}".format(tc))
             elif tc < 130:
-                tc = c.red("${:8.2f}".format(tc))
+                tc = c.red("${:9.2f}".format(tc))
             else:
-                tc = c.RED("${:8.2f}".format(tc))
+                tc = c.RED("${:9.2f}".format(tc))
             out.append(
-                "    {}\t${:.2f} {}\t{:5.1f}\t{}"
+                "    {sumcharges}   ${unitprice:.2f} {unit:20}{count:<16.1f}{name}"
                 .format(
-                    tc,
-                    chargesByProduct[product]['productRate'],
-                    chargesByProduct[product]['unitName'].replace('Hour', 'Hr'),
-                    chargesByProduct[product]['summaryPrice'] / chargesByProduct[product]['productRate'],
-                    product))
-        out.append("    --------")
+                    sumcharges=tc,
+                    unitprice=chargesByProduct[product]['productRate'],
+                    unit=chargesByProduct[product]['unitName'].replace('Hour', 'Hr'),
+                    count=chargesByProduct[product]['productCount'],
+                    name=product))
+        out.append("    ----------")
         out.append(
             "    "  +
-            c.REVERSE("${:8.2f}\tMonthly charges grand total".format(prodGrandTotal)))
+            c.REVERSE("${:9.2f}   Monthly charges grand total".format(prodGrandTotal)))
         out.append("")
         return "\n".join(out)
 
@@ -1043,6 +956,7 @@ class User(ConfigNode):
     def __init__(self, user, parent, userId):
         ConfigNode.__init__(self, user, parent)
         parent.numberOfUsers += 1
+        self.user = user
         self.userId = userId
         self.refresh()
     
@@ -1063,13 +977,24 @@ class User(ConfigNode):
             self.refresh()
         return (self.status, self.happy)
     
-    def ui_command_get_info(self):
+    def ui_command_print_def(self, outputFile='@EDITOR'):
         """
-        Pretty-print user details.
+        Pretty-print JSON definition of user details.
+        
+        Optionally specify *outputFile* as @term or @pager or as a relative /
+        absolute path on the local system (tab-completion available). Default
+        value of '@EDITOR' checks environment for a RAVSH_EDITOR variable, and
+        failing that, EDITOR, and failing that, it falls back to gvim, then
+        vim, then less.
         """
         print()
-        print(ui.prettify_json(rCache.get_user(self.userId)))
-        print()
+        outputFile = self.ui_eval_param(outputFile, 'string', '@EDITOR')
+        description = "user definition for /users/{}".format(self.user)
+        ui.print_obj(rCache.get_user(self.userId), description, outputFile,
+            tmpPrefix='user={}'.format(self.user))
+    
+    def ui_complete_print_def(self, parameters, text, current_param):
+        return _complete_print_obj(parameters, text, current_param)
     
     def ui_command_update_info(self):
         """
@@ -1248,7 +1173,7 @@ class Blueprints(ConfigNode):
     def ui_complete_backup_all(self, parameters, text, current_param):
         if current_param != 'bpDir':
             return []
-        completions = complete_path(text, S_ISDIR)
+        completions = _complete_path(text, S_ISDIR)
         if len(completions) == 1 and not completions[0].endswith('/'):
             completions = [completions[0] + ' ']
         return completions
@@ -1377,7 +1302,7 @@ class Blueprints(ConfigNode):
     
     def ui_complete_import_from_file(self, parameters, text, current_param):
         if current_param == 'inputFile':
-            completions = complete_path(text, S_ISREG)
+            completions = _complete_path(text, S_ISREG)
             if len(completions) == 1 and not completions[0].endswith('/'):
                 completions = [completions[0] + ' ']
             return completions
@@ -1488,42 +1413,24 @@ class Bp(ConfigNode):
         pager("Blueprint available publish locations for '{}'\n".format(self.bpName) +
               ui.prettify_json(rClient.get_blueprint_publish_locations(self.bpId)))
     
-    def print_def(self):
-        pager("JSON definition for BLUEPRINT '{}'\n".format(self.bpName) +
-              ui.prettify_json(rClient.get_blueprint(self.bpId)))
-    
-    def ui_command_print_def(self, outputFile='@pager'):
+    def ui_command_print_def(self, outputFile='@EDITOR'):
         """
-        Pretty-print blueprint JSON in pager or export to outputFile.
+        Pretty-print JSON definition of blueprint.
         
-        Optionally specify *outputFile* as a relative or absolute path on the
-        local system (tab-completion available).
+        Optionally specify *outputFile* as @term or @pager or as a relative /
+        absolute path on the local system (tab-completion available). Default
+        value of '@EDITOR' checks environment for a RAVSH_EDITOR variable, and
+        failing that, EDITOR, and failing that, it falls back to gvim, then
+        vim, then less.
         """
         print()
-        outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
-        if outputFile == '@pager':
-            self.print_def()
-        else:
-            try:
-                ui.prepare_file_for_writing(outputFile)
-            except:
-                return
-            try:
-                with open(outputFile, 'w') as f:
-                    json.dump(rClient.get_blueprint(self.bpId), f, indent=4)
-            except IOError as e:
-                print(c.RED("Problem writing bp definition for '{}'\n"
-                            "{}\n".format(self.bpName, e)))
-                return
-            print(c.green("Exported bp definition to file: '{}'\n".format(outputFile)))
+        outputFile = self.ui_eval_param(outputFile, 'string', '@EDITOR')
+        description = "BP definition for /blueprints/{}".format(self.bpName)
+        ui.print_obj(rClient.get_blueprint(self.bpId), description, outputFile,
+            tmpPrefix='bp={}'.format(self.bpName))
     
     def ui_complete_print_def(self, parameters, text, current_param):
-        if current_param != 'outputFile':
-            return []
-        completions = complete_path(text, S_ISREG)
-        if len(completions) == 1 and not completions[0].endswith('/'):
-            completions = [completions[0] + ' ']
-        return completions
+        return _complete_print_obj(parameters, text, current_param)
     
     def ui_command_backup(self):
         """
@@ -1875,7 +1782,7 @@ class App(ConfigNode):
     def summary(self):
         app = rCache.get_app(self.appId)
         if app['published']:
-            region = app['deployment']['cloudRegion']['name']
+            region = app['deployment']['regionId']
             totalErrorVms = app['deployment']['totalErrorVms']
             appState = ravello_sdk.application_state(app)
             if isinstance(appState, list):
@@ -2075,8 +1982,8 @@ class App(ConfigNode):
         self.query_status()
     
     def query_status(self):
-        vmDetails, regionName, expirationTime = rCache.get_application_details(self.appId)
-        if not vmDetails:
+        app = rClient.get_application(self.appId, aspect='deployment')
+        if not app['published']:
             self.print_message_app_not_published()
             return None, None
         # Defaults
@@ -2085,6 +1992,10 @@ class App(ConfigNode):
         sshKey = ""
         if rOpt.cfgFile['sshKeyFile']:
             sshKey = " -i {}".format(rOpt.cfgFile['sshKeyFile'])
+        try:
+            expirationTime = ui.sanitize_timestamp(app['deployment']['expirationTime'])
+        except:
+            expirationTime = None
         if expirationTime:
             diff = expirationTime - time()
             m, s = divmod(expirationTime - time(), 60)
@@ -2106,19 +2017,11 @@ class App(ConfigNode):
                 autoStopMessage += c.BOLD(" min at {}".format(expireDateTime.strftime('%H:%M:%S')))
         else:
             autoStopMessage = c.BOLD("never had auto-stop set")
-        # Print
-        print(
-            c.BOLD("App VMs in region {} ".format(regionName)) +
-            autoStopMessage)
+        # Print our header message
+        region = app['deployment']['regionId']
+        print(c.BOLD("App VMs in region {} {}".format(region, autoStopMessage)))
         print()
-        for vm in vmDetails:
-            ssh = vnc = None
-            # Set ssh command
-            if vm['ssh']['fqdn']:
-                ssh = c.cyan("ssh{}{} root@{}".format(sshKey, vm['ssh']['port'], vm['ssh']['fqdn']))
-            # Set VNC url
-            if vm['vnc']:
-                vnc = c.blue(vm['vnc'])
+        for vm in app['deployment']['vms']:
             # Set variables for return
             if vm['state'] not in 'STARTED':
                 allVmsAreStarted = False
@@ -2139,33 +2042,78 @@ class App(ConfigNode):
                 state = c.red(vm['state'])
             else:
                 state = c.RED(vm['state'])
-            # Start printing
+            # Print state and hostnames
             print("  {}".format(c.BOLD(vm['name'])))
             print("     State:              {}".format(state))
-            if vm['state'] in 'STARTED' or vm['state'] in 'STOPPING' or vm['state'] in 'RESTARTING':
-                if vm['hostnames']:
-                    print("     Internal DNS Name:  ", end="")
-                    print(*vm['hostnames'], sep=', ')
-                if vm['nics']:
-                    for i in vm['nics']:
-                        print("     NIC {}".format(i['name']))
-                        print("       Private IP:       {}".format(i['ip_Private']))
-                        for ip in i['ip_Additional']:
-                            print("       Private IP:       {}".format(ip))
-                        if i['ip_Elastic']:
-                            print("       Public Elastic:   {} ({})".format(i['ip_Elastic'], i['fqdn']))
-                        if i['ip_Public']:
-                            print("       Public Static:    {} ({})".format(i['ip_Public'], i['fqdn']))
-                        if i['ip_Forwarder'] and i['services']:
-                            print("       Public DNAT:      {} ({})".format(i['ip_Forwarder'], i['fqdn']))
-                        for s in i['services']:
-                            print("       External Svc:     {svc} {export}/{proto} maps to internal {inport}/{proto}".format(
-                                svc=s['name'], export=s['externalPort'], proto=s['protocol'], inport=s['portRange']))
-                if vm['state'] not in 'STARTING':
-                    if ssh:
-                        print("     SSH Command:        {}".format(ssh))
-                    if vnc:
-                        print("     VNC Web URL:        {}".format(vnc))
+            if vm.has_key('hostnames'):
+                print("     Internal DNS Name:  ", end="")
+                print(*vm['hostnames'], sep=', ')
+            # Setup empty ssh dict
+            vm['ssh'] = {}
+            # Compile and print details on each network interface
+            if vm.has_key('networkConnections'):
+                for nic in vm['networkConnections']:
+                    internal = None
+                    ip_Additional = []
+                    fqdn = ''
+                    ip_Elastic = None
+                    ip_Public = None
+                    ip_Forwarder = None
+                    services = []
+                    # Get private IPs
+                    if nic['ipConfig'].has_key('autoIpConfig'):
+                        internal = nic['ipConfig']['autoIpConfig']['allocatedIp']
+                    elif nic['ipConfig'].has_key('staticIpConfig'):
+                        internal = nic['ipConfig']['staticIpConfig']['ip']
+                    # Get extra private IPs
+                    if nic.has_key('additionalIpConfig'):
+                        for addtlIp in nic['additionalIpConfig']:
+                            ip_Additional.append(addtlIp['staticIpConfig']['ip'])
+                    # Get FQDN
+                    if nic['ipConfig'].has_key('fqdn'):
+                        fqdn = nic['ipConfig']['fqdn']
+                    # Get public IP
+                    if nic['ipConfig']['hasPublicIp']:
+                        try:
+                            ip_Elastic = nic['ipConfig']['elasticIpAddress']
+                        except:
+                            ip_Public = nic['ipConfig']['publicIp']
+                    elif nic['ipConfig'].has_key('publicIp'):
+                        ip_Forwarder = nic['ipConfig']['publicIp']
+                    # Check for services
+                    if vm.has_key('suppliedServices'):
+                        for svc in vm['suppliedServices']:
+                            if svc['external'] and svc['useLuidForIpConfig'] and nic['ipConfig']['id'] == svc['ipConfigLuid'] and not svc['name'].startswith('dummy'):
+                                if svc['name'] == 'ssh' and not vm['ssh']:
+                                    vm['ssh']['port'] = " -p {}".format(svc['externalPort'])
+                                    vm['ssh']['fqdn'] = fqdn
+                                s = "{svc} port {exPort}/{proto} maps to internal port {inPort}".format(
+                                    svc=svc['name'], exPort=svc['externalPort'], proto=svc['protocol'], inPort=svc['portRange'])
+                                services.append(s)
+                    # Finally, print:
+                    print("     NIC {}".format(nic['name']))
+                    print("       Internal IP:      {}".format(internal))
+                    for ip in ip_Additional:
+                        print("       Internal IP:      {}".format(ip))
+                    if ip_Elastic:
+                        print("       Public Elastic:   {} ({})".format(ip_Elastic, fqdn))
+                    if ip_Public:
+                        print("       Public Static:    {} ({})".format(ip_Public, fqdn))
+                    if ip_Forwarder and services:
+                        print("       Public DNAT:      {} ({})".format(ip_Forwarder, fqdn))
+                    for s in services:
+                        print("       External Svc:     {}".format(s))
+            # Print ssh command
+            if vm['ssh'].has_key('fqdn'):
+                ssh = c.cyan("ssh{}{} root@{}".format(sshKey, vm['ssh']['port'], vm['ssh']['fqdn']))
+                print("     SSH Command:        {}".format(ssh))
+            # Print VNC url
+            try:
+                vnc = c.blue(rClient.get_vnc_url(self.appId, vm['id']))
+            except:
+                pass
+            else:
+                print("     VNC Web URL:        {}".format(vnc))
             print()
         return allVmsAreStarted, allVmsAreStopped
     
@@ -2217,41 +2165,47 @@ class App(ConfigNode):
         else:
             return completions
     
-    def print_def(self):
-        pager("JSON definition for APPLICATION '{}'\n".format(self.appName) +
-              ui.prettify_json(rClient.get_application(self.appId)))
-    
-    def ui_command_print_def(self, outputFile='@pager'):
+    def ui_command_print_def(self, outputFile='@EDITOR', aspect='@auto'):
         """
         Pretty-print app JSON in pager or export to *outputFile*.
         
-        Optionally specify *outputFile* as a relative or absolute path on the
-        local system (tab-completion available).
+        Optionally specify *outputFile* as @term or @pager or as a relative /
+        absolute path on the local system (tab-completion available). Default
+        value of '@EDITOR' checks environment for a RAVSH_EDITOR variable, and
+        failing that, EDITOR, and failing that, it falls back to gvim, then
+        vim, then less.
+        
+        Optionally specify *aspect* as 'deployment' or 'design' or
+        'properties'. Default value of '@auto' chooses deployment if published
+        and design if unpublished.
         """
         print()
-        outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
-        if outputFile == '@pager':
-            self.print_def()
-        else:
-            try:
-                ui.prepare_file_for_writing(outputFile)
-            except:
-                return
-            try:
-                with open(outputFile, 'w') as f:
-                    json.dump(rClient.get_application(self.appId), f, indent=4)
-            except IOError as e:
-                print(c.RED("Problem writing app definition for '{}'\n"
-                            "  {}\n".format(self.appName, e)))
-                return
-            print(c.green("Exported app definition to file: '{}'\n".format(outputFile)))
-    
+        outputFile = self.ui_eval_param(outputFile, 'string', '@EDITOR')
+        aspect = self.ui_eval_param(aspect, 'string', '@auto')
+        if aspect == 'deployment' and not self.confirm_app_is_published():
+            return
+        if aspect == '@auto':
+            if rClient.is_application_published(self.appId)['value']:
+                aspect = 'deployment'
+            else:
+                aspect = 'design'
+        description = "APP {} definition for /apps/{}".format(aspect, self.appName)
+        obj = rClient.get_application(self.appId, aspect=aspect)
+        ui.print_obj(obj, description, outputFile, tmpPrefix=self.appName)
+
     def ui_complete_print_def(self, parameters, text, current_param):
-        if current_param != 'outputFile':
-            return []
-        completions = complete_path(text, S_ISREG)
-        if len(completions) == 1 and not completions[0].endswith('/'):
-            completions = [completions[0] + ' ']
+        if current_param == 'outputFile':
+            completions = _complete_path(text, S_ISREG)
+            if len(completions) == 1 and not completions[0].endswith('/'):
+                completions = [completions[0] + ' ']
+        elif current_param == 'aspect':
+            L = ['@auto', 'deployment', 'design', 'properties']
+            completions = [a for a in L
+                           if a.startswith(text)]
+            if len(completions) == 1:
+                completions = [completions[0] + ' ']
+        else:
+            completions = []
         return completions
     
     def delete_app(self):
@@ -2568,42 +2522,47 @@ class Vm(ConfigNode):
         else:
             return False
     
-    def print_def(self):
-        """Pretty-print vm JSON in pager."""
-        pager("JSON definition for VM '{}' in APPLICATION '{}'\n".format(self.vmName, self.appName) +
-              ui.prettify_json(rClient.get_vm(self.appId, self.vmId, aspect='deployment')))
-    
-    def ui_command_print_def(self, outputFile='@pager'):
+    def ui_command_print_def(self, outputFile='@EDITOR', aspect='@auto'):
         """
-        Pretty-print VM JSON in pager or export to *outputFile*.
+        Pretty-print JSON defininition of VM.
         
-        Optionally specify *outputFile* as a relative or absolute path on the
-        local system (tab-completion available).
+        Optionally specify *outputFile* as @term or @pager or as a relative /
+        absolute path on the local system (tab-completion available). Default
+        value of '@EDITOR' checks environment for a RAVSH_EDITOR variable, and
+        failing that, EDITOR, and failing that, it falls back to gvim, then
+        vim, then finally less.
+        
+        Optionally specify *aspect* as 'deployment' or 'design'. Default value
+        of '@auto' chooses deployment if published and design if unpublished.
         """
         print()
-        outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
-        if outputFile == '@pager':
-            self.print_def()
-        else:
-            try:
-                ui.prepare_file_for_writing(outputFile)
-            except:
-                return
-            try:
-                with open(outputFile, 'w') as f:
-                    json.dump(rClient.get_vm(self.appId, self.vmId, aspect='deployment'), f, indent=4)
-            except IOError as e:
-                print(c.RED("Problem writing VM definition for '{}' in APP '{}'\n"
-                            "  {}\n".format(self.vmName, self.appName, e)))
-                return
-            print(c.green("Exported VM definition to file: '{}'\n".format(outputFile)))
+        outputFile = self.ui_eval_param(outputFile, 'string', '@EDITOR')
+        aspect = self.ui_eval_param(aspect, 'string', '@auto')
+        if aspect == 'deployment' and not self.parent.parent.confirm_app_is_published():
+            return
+        if aspect == '@auto':
+            if rClient.is_application_published(self.appId)['value']:
+                aspect = 'deployment'
+            else:
+                aspect = 'design'
+        description = "VM {} definition for /apps/{}/vms/{}".format(aspect, self.appName, self.vmName)
+        obj = rClient.get_vm(self.appId, self.vmId, aspect=aspect)
+        ui.print_obj(obj, description, outputFile,
+            tmpPrefix='vm={}_{}'.format(self.appName, self.vmName))
     
     def ui_complete_print_def(self, parameters, text, current_param):
-        if current_param != 'outputFile':
-            return []
-        completions = complete_path(text, S_ISREG)
-        if len(completions) == 1 and not completions[0].endswith('/'):
-            completions = [completions[0] + ' ']
+        if current_param == 'outputFile':
+            completions = _complete_path(text, S_ISREG)
+            if len(completions) == 1 and not completions[0].endswith('/'):
+                completions = [completions[0] + ' ']
+        elif current_param == 'aspect':
+            L = ['@auto', 'deployment', 'design']
+            completions = [a for a in L
+                           if a.startswith(text)]
+            if len(completions) == 1:
+                completions = [completions[0] + ' ']
+        else:
+            completions = []
         return completions
     
     def ui_command_start(self):
@@ -2915,98 +2874,75 @@ class Share(ConfigNode):
         ConfigNode.__init__(self, shareId, parent)
         parent.numberOfShares += 1
         self.shareId = shareId
-        self.sharedResourceTypeShortener = {
+        resourceTypeShortener = {
             'BLUEPRINT': 'BP',
             'LIBRARY_VM': 'VM',
             'DISK_IMAGE': 'DISK',
             }
-        self.refresh()
-    
-    def refresh(self):
-        self._timestamp = time()
-        s = rCache.get_share(self.shareId)
+        s = rCache.get_share(shareId)
         # Shorten the resourceType
-        resourceType = self.sharedResourceTypeShortener[s['sharedResourceType']]
+        self.resourceType = resourceTypeShortener[s['sharedResourceType']]
         # Translate resource ID into a name
         resId = s['sharedResourceId']
-        if resourceType in 'BP':
+        if self.resourceType in 'BP':
             j = rCache.get_bp(resId)
-        elif resourceType in 'VM':
+        elif self.resourceType in 'VM':
             j = rClient.get_image(resId)
-        elif resourceType in 'DISK':
+        elif self.resourceType in 'DISK':
             j = rClient.get_diskimage(resId)
         if j and j.has_key('name'):
-            resource = "\"{}\"".format(j['name'])
+            self.resource = "\"{}\"".format(j['name'])
         else:
-            resource = "ID {}".format(resId)
+            self.resource = "ID {}".format(resId)
         # Convert sharingUserId to username
         u = rCache.get_user(int(s['sharingUserId']))
         if u:
-            user = u['username']
+            self.user = u['username']
         else:
-            user = "UID {}".format(s['sharingUserId'])
+            self.user = "UID {}".format(s['sharingUserId'])
         # Convert the targetEmail/communityId to a string
         if s.has_key('targetEmail'):
-            target = s['targetEmail']
+            self.target = s['targetEmail']
         elif s.has_key('targetCommunityId'):
             try:
                 community = rClient.get_community(s['targetCommunityId'])
-                target = "community \"{}\" ({})".format(community['name'], community['type'])
+                self.target = "community \"{}\" ({})".format(community['name'], community['type'])
             except:
-                target = "community {}".format(s['targetCommunityId'])
+                self.target = "community {}".format(s['targetCommunityId'])
         else:
-            target = "(NULL)"
+            self.target = "(NULL)"
         # Convert timestamp to date
-        date = ui.convert_ts_to_date(s['time'], showHours=False)
+        self.date = ui.convert_ts_to_date(s['time'], showHours=False)
         # Compose it all together
         self.status = "{resourceType} {resource}; {user} -> {target} on {date}".format(
-            resourceType=resourceType,
-            resource=resource,
-            user=user,
-            target=target,
-            date=date)
-    
+            resourceType=self.resourceType,
+            resource=self.resource,
+            user=self.user,
+            target=self.target,
+            date=self.date)
+
     def summary(self):
-        if ui.get_timestamp_proximity(self._timestamp) < -120:
-            self.refresh()
         return (self.status, None)
     
-    def print_def(self):
-        pager("JSON definition for SHARE '{}'\n".format(self.shareId) +
-              ui.prettify_json(rCache.get_share(self.shareId)))
-    
-    def ui_command_print_def(self, outputFile='@pager'):
+    def ui_command_print_def(self, outputFile='@EDITOR'):
         """
-        Pretty-print share JSON in pager or export to outputFile.
+        Pretty-print JSON definition of share.
         
-        Optionally specify *outputFile* as a relative or absolute path on the
-        local system (tab-completion available).
+        Optionally specify *outputFile* as @term or @pager or as a relative /
+        absolute path on the local system (tab-completion available). Default
+        value of '@EDITOR' checks environment for a RAVSH_EDITOR variable, and
+        failing that, EDITOR, and failing that, it falls back to gvim, then
+        vim, then less.
         """
         print()
-        outputFile = self.ui_eval_param(outputFile, 'string', '@pager')
-        if outputFile == '@pager':
-            self.print_def()
-        else:
-            try:
-                ui.prepare_file_for_writing(outputFile)
-            except:
-                return
-            try:
-                with open(outputFile, 'w') as f:
-                    json.dump(rCache.get_share(self.shareId), f, indent=4)
-            except IOError as e:
-                print(c.RED("Problem writing share definition for '{}'\n"
-                            "{}\n".format(self.shareId, e)))
-                return
-            print(c.green("Exported share definition to file: '{}'\n".format(outputFile)))
-    
+        outputFile = self.ui_eval_param(outputFile, 'string', '@EDITOR')
+        description = "share definition for {} {} (/shares/{})".format(
+            self.resourceType, self.resource, self.shareId)
+        ui.print_obj(rCache.get_share(self.shareId), description, outputFile,
+            tmpPrefix='share={}_{}'.format(self.resourceType, self.shareId))
+        
     def ui_complete_print_def(self, parameters, text, current_param):
-        if current_param != 'outputFile':
-            return []
-        completions = complete_path(text, S_ISREG)
-        if len(completions) == 1 and not completions[0].endswith('/'):
-            completions = [completions[0] + ' ']
-        return completions
+        return _complete_print_obj(parameters, text, current_param)
     
     def delete(self):
         try:
