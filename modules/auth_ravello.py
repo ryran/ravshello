@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright 2015 Ravshello Authors
+# Copyright 2015, 2017 Ravshello Authors
 # License: Apache License 2.0 (see LICENSE or http://apache.org/licenses/LICENSE-2.0.html)
 
 # Modules from standard library
@@ -8,8 +8,10 @@ from getpass import getpass
 import sys
 
 # Custom modules
+from . import string_ops as c
+from . import cfg
 try:
-    import ravello_sdk
+    from . import ravello_sdk
     ravello_sdk.is_rsaw_sdk()
 except:
     print("Missing proper version of required python module (rsaw's ravello_sdk)\n"
@@ -39,9 +41,10 @@ def get_passphrase(prompt="Enter passphrase: ", defaultPass=None):
     return passwd
 
 
-def login(rOpt):
+def login():
     """Determine Ravello credentials and login via RavelloClient object"""
-    c = rOpt.c
+    # Simplify
+    rOpt = cfg.opts
     # Create client object
     rClient = ravello_sdk.RavelloClient()
     c.verbose("\nConnecting to Ravello . . .")

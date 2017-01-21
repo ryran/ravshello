@@ -32,21 +32,19 @@ del ConfigNode.ui_command_bookmarks
 del ConfigNode.ui_complete_bookmarks
 
 # Custom modules
-import string_ops
-import ui_methods as ui
+from . import cfg
+from . import string_ops as c
+from . import ui_methods as ui
 try:
-    import ravello_sdk
+    from . import ravello_sdk
     ravello_sdk.is_rsaw_sdk()
 except:
     print("Missing proper version of required python module (rsaw's ravello_sdk)\n"
           "Get it from https://github.com/ryran/python-sdk/blob/ravshello-stable/lib/ravello_sdk.py\n")
     raise
 
-# Globals
-user = c = rOpt = rClient = rCache = appnamePrefix = None
-defaultAppExpireTime = 120
-defaultAppExtendTime = 60
-maxLearnerExtendTime = 120
+# Set aside globals that will be used for code-clarity
+rOpt = user = appnamePrefix = rClient = rCache = None
 
 
 def is_admin():
@@ -85,14 +83,13 @@ def get_num_learner_active_vms(learner):
     return activeVms
 
 
-def main(opt, client):
-    # Set some important globals
-    global rOpt, rClient, user, appnamePrefix, c, rCache
-    rOpt = opt
-    rClient = client
-    user = rOpt.user
+def main():
+    # Set aside globals that will be used for code-clarity
+    global rOpt, user, appnamePrefix, rClient, rCache
+    rOpt = cfg.opts
+    user = cfg.user
     appnamePrefix = 'k:{}__'.format(user)
-    c = rOpt.c
+    rClient = cfg.rClient
     rCache = ui.RavelloCache(rClient)
     # Clear preferences if asked via cmdline arg
     if rOpt.clearPreferences:
@@ -104,7 +101,7 @@ def main(opt, client):
     shell.prefs['prompt_length'] = 0
     shell.prefs['tree_show_root'] = True
     shell.prefs['tree_status_mode'] = True
-    if not rOpt.enableColor:
+    if not c.enableColor:
         shell.prefs['color_mode'] = False
     if not rOpt.showAllApps:
         # Turn off max depth restriction for admins in restricted-view mode
@@ -137,7 +134,7 @@ def main(opt, client):
     else:
         # What to do when not admin
         if rOpt.cmdlineArgs or rOpt.scriptFile:
-            print(c.red("Sorry! Only admins are allowed to use ravshello non-interactively\n"))
+            print(c.red("Sorry! Only admins are allowed to use {} non-interactively\n".format(cfg.prog)))
             return
         try:
             # Plan was to flush sys.stdin with this, per
@@ -145,7 +142,7 @@ def main(opt, client):
             # It always throws exception though, so I decided to just use it to quit
             termios.tcflush(stdin, termios.TCIOFLUSH)
         except:
-            print(c.red("Sorry! Only admins are allowed to use ravshello non-interactively\n"))
+            print(c.red("Sorry! Only admins are allowed to use {} non-interactively\n".format(cfg.prog)))
             return
         # Initial usage hints
         print(c.BOLD("Instructions:"))
@@ -496,8 +493,8 @@ class Monitoring(ConfigNode):
         Ravello always does times in a non-standard way, where the thousandths
         of a second are always present, but there's no delimiting decimal place,
         as is customary. ...
-        This ravshello function compensates for you by appending 3 zeroes to the
-        end of any number you pass (so basically, don't worry about it).
+        This function compensates for you by appending 3 zeroes to the end of any
+        number you pass (so basically, don't worry about it).
         """
         print()
         maxResults = self.ui_eval_param(maxResults, 'number', 500)
@@ -1413,7 +1410,7 @@ class Bp(ConfigNode):
         self.bpId = bp['id']
         self.bpOwner = bp['owner']
         self.creationTime = datetime.fromtimestamp(int(str(bp['creationTime'])[:-3]))
-        if bp.has_key('description') and any(tag in bp['description'] for tag in rOpt.learnerBlueprintTag):
+        if bp.has_key('description') and any(tag in bp['description'] for tag in cfg.learnerBlueprintTag):
             self.isLearnerBp = True
             parent.numberOfLearnerBps += 1
         else:
@@ -1658,7 +1655,7 @@ class Applications(ConfigNode):
                     try:
                         self.get_child(appName).delete_app()
                     except:
-                        print(c.yellow("\nThere is a new application available to you since you started ravshello!"))
+                        print(c.yellow("\nThere is a new application available to you since you started {}!".format(cfg.prog)))
                         print("To avoid deleting an app you cannot see, we've refreshed the apps for you ..." +
                               "You'll now need to re-run this command\n")
                         return
@@ -1708,7 +1705,7 @@ class Applications(ConfigNode):
                 description = bp['description']
             except:
                 description = ''
-            if is_admin() or any(tag in description for tag in rOpt.learnerBlueprintTag) or '#k:{}'.format(user) in description:
+            if is_admin() or any(tag in description for tag in cfg.learnerBlueprintTag) or '#k:{}'.format(user) in description:
                 allowedBlueprints.append(bp['name'])
         if not allowedBlueprints:
             print(c.red("\nThere are no blueprints available for you to base an application on!\n"))
@@ -1749,10 +1746,10 @@ class Applications(ConfigNode):
                     aFixed = c.replace_bad_chars_with_underscores(a)
                     if a != aFixed:
                         print(c.red(
-                            "\nNote that configshell (which ravshello uses) won't accept certain chars in paths\n"
+                            "\nNote that configshell (which {} uses) won't accept certain chars in paths\n"
                             "Namely, only the following are allowed: A-Za-z0-9:_.-\n"
                             "In order handle apps with characters BESIDES those, one would have to use the\n"
-                            "*interactive* cd command with arrow keys"))
+                            "*interactive* cd command with arrow keys".format(cfg.prog)))
                         response = raw_input(c.CYAN("\nReplace bad characters with underscores? [y/N] "))
                         if response == 'y':
                             a = aFixed
@@ -1778,7 +1775,7 @@ class Applications(ConfigNode):
         else:
             appDesc = desc
         
-        appDesc += "[Created w/ravshello {} by {}]".format(rOpt.ravshelloVersion.split()[1], user)
+        appDesc += "[Created w/{} {} by {}]".format(cfg.prog, cfg.__version__, user)
         
         # Build request dictionary
         req = {'name' : appName, 'description' : appDesc, 'baseBlueprintId': baseBlueprintId}
@@ -1813,7 +1810,7 @@ class Applications(ConfigNode):
                     description = bp['description']
                 except:
                     description = ''
-                if is_admin() or any(tag in description for tag in rOpt.learnerBlueprintTag) or '#k:{}'.format(user) in description:
+                if is_admin() or any(tag in description for tag in cfg.learnerBlueprintTag) or '#k:{}'.format(user) in description:
                     allowedBlueprints.append(bp['name'])
             completions = [a for a in allowedBlueprints
                            if a.startswith(text)]
@@ -1838,7 +1835,7 @@ class Applications(ConfigNode):
                         description = bp['description']
                     except:
                         description = ''
-                    if is_admin() or any(tag in description for tag in rOpt.learnerBlueprintTag) or '#k:{}'.format(user) in description:
+                    if is_admin() or any(tag in description for tag in cfg.learnerBlueprintTag) or '#k:{}'.format(user) in description:
                         allowedBlueprints[bp['name']] = bp['id']
                 try:
                     bpid = allowedBlueprints[blueprint]
@@ -2001,10 +1998,10 @@ class App(ConfigNode):
             if intervalSec < 5:
                 print(c.red("\nUsing minimum learner interval of 5 sec"))
                 intervalSec = 5
-            if totalMin > maxLearnerExtendTime:
+            if totalMin > cfg.maxLearnerExtendTime:
                 print(c.red("\nUsing maximum learner watch-time of {} min"
-                            .format(maxLearnerExtendTime)))
-                totalMin = maxLearnerExtendTime
+                            .format(cfg.maxLearnerExtendTime)))
+                totalMin = cfg.maxLearnerExtendTime
             elif totalMin < 1:
                 print(c.red("\nUsing minimum learner watch-time of 1 min"))
                 totalMin = 1
@@ -2185,7 +2182,7 @@ class App(ConfigNode):
                       .format(minutes)))
         rCache.purge_app_cache(self.appId)
     
-    def ui_command_extend_autostop(self, minutes=defaultAppExtendTime):
+    def ui_command_extend_autostop(self, minutes=cfg.defaultAppExtendTime):
         """
         Set the application auto-stop time via *minutes*.
         
@@ -2193,12 +2190,12 @@ class App(ConfigNode):
         auto-stop timer from 0 to 120 min (maxLearnerExtendTime).
         Admins can set any value, including '-1' which disables auto-stop timer.
         """
-        minutes = self.ui_eval_param(minutes, 'number', defaultAppExtendTime)
+        minutes = self.ui_eval_param(minutes, 'number', cfg.defaultAppExtendTime)
         if not is_admin():
-            if minutes > maxLearnerExtendTime:
+            if minutes > cfg.maxLearnerExtendTime:
                 print(c.red("\nUsing maximum learner auto-stop time of {} minutes"
-                            .format(maxLearnerExtendTime)))
-                minutes = maxLearnerExtendTime
+                            .format(cfg.maxLearnerExtendTime)))
+                minutes = cfg.maxLearnerExtendTime
             elif minutes < 0:
                 print(c.RED("\nInvalid learner auto-stop time\n"))
                 return
@@ -2322,15 +2319,15 @@ class App(ConfigNode):
         if not is_admin():
             # Check that we don't have more published apps than we should
             totalActiveVms = get_num_learner_active_vms(user)
-            if self.parent.numberOfPublishedApps >= rOpt.maxLearnerPublishedApps:
+            if self.parent.numberOfPublishedApps >= cfg.maxLearnerPublishedApps:
                 print(c.red("\nYou have reached or exceeded the maximum number ({}) of published apps!"
-                            .format(rOpt.maxLearnerPublishedApps)))
+                            .format(cfg.maxLearnerPublishedApps)))
                 print("Delete an app and try running command:")
                 print(c.BOLD("    /apps/{}/ publish\n".format(self.appName)))
                 return
-            elif totalActiveVms >= rOpt.maxLearnerActiveVms:
+            elif totalActiveVms >= cfg.maxLearnerActiveVms:
                 print(c.red("\nYou have reached or exceeded the maximum number ({}) of active VMs!"
-                            .format(rOpt.maxLearnerActiveVms)))
+                            .format(cfg.maxLearnerActiveVms)))
                 print("Stop a VM (or a whole application) and then try running command:")
                 print(c.BOLD("    /apps/{}/ start\n".format(self.appName)))
                 return
@@ -2376,7 +2373,7 @@ class App(ConfigNode):
         print(c.yellow("\nRavello now publishing your application (Could take a while)"))
         # Configure auto-stop
         if startAllVms:
-            self.extend_autostop(minutes=defaultAppExpireTime)
+            self.extend_autostop(minutes=cfg.defaultAppExpireTime)
             self.loop_query_status(desiredState='STARTED')
         else:
             rCache.purge_app_cache(self.appId)
@@ -2411,13 +2408,13 @@ class App(ConfigNode):
         if not is_admin():
             # Check that we don't have more started VMs than we should
             totalActiveVms = get_num_learner_active_vms(user)
-            if totalActiveVms >= rOpt.maxLearnerActiveVms:
+            if totalActiveVms >= cfg.maxLearnerActiveVms:
                 print(c.red("\nYou have reached or exceeded the maximum number ({}) of active VMs!\n"
-                            .format(rOpt.maxLearnerActiveVms)))
+                            .format(cfg.maxLearnerActiveVms)))
                 print("Stop a VM (or a whole application) and then try this again")
                 return
         # Start out by setting autostop
-        self.extend_autostop(minutes=defaultAppExpireTime)
+        self.extend_autostop(minutes=cfg.defaultAppExpireTime)
         try:
             rClient.start_application(self.appId)
         except:
@@ -2450,7 +2447,7 @@ class App(ConfigNode):
         """
         if not self.confirm_app_is_published():
             return
-        self.extend_autostop(minutes=defaultAppExpireTime)
+        self.extend_autostop(minutes=cfg.defaultAppExpireTime)
         try:
             rClient.restart_application(self.appId)
         except:
@@ -2622,7 +2619,7 @@ class Vm(ConfigNode):
             return
         if not self.confirm_vm_is_state('STOPPED'):
             return
-        self.parent.parent.extend_autostop(minutes=defaultAppExtendTime)
+        self.parent.parent.extend_autostop(minutes=cfg.defaultAppExtendTime)
         try:
             rClient.start_vm(self.appId, self.vmId)
         except:

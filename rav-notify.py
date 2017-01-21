@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-# Copyright 2015 Ravshello Authors
+# Copyright 2015, 2017 Ravshello Authors
 # License: Apache License 2.0 (see LICENSE or http://apache.org/licenses/LICENSE-2.0.html)
 
 # Modules from standard library
@@ -16,10 +16,10 @@ import sys
 import os
 
 # Custom modules
-import string_ops
-from ui_methods import get_timestamp_proximity, sanitize_timestamp
+from modules import string_ops as c
+from modules.ui_methods import get_timestamp_proximity, sanitize_timestamp
 try:
-    import ravello_sdk
+    from modules import ravello_sdk
     ravello_sdk.is_rsaw_sdk()
 except:
     print("Missing proper version of required python module (rsaw's ravello_sdk)\n"
@@ -27,7 +27,7 @@ except:
     raise
 
 # Globals
-rClient = rOpt = c = appnamePrefix = None
+rClient = rOpt = appnamePrefix = None
 
 
 # Helper functions
@@ -167,9 +167,9 @@ def act_on_imminent_app_expiration(runningApps=[], thresholdSecs=5*60,
 
 def main(argparseOptions):
     
-    global c, rOpt, appnamePrefix, rClient
+    global rOpt, appnamePrefix, rClient
     rOpt = argparseOptions
-    c = string_ops.Printer(rOpt.enableColor)
+    c.enableColor = rOpt.enableColor
     runningApps = []
     timestamps = []
     

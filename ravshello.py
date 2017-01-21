@@ -24,24 +24,21 @@ import os
 import sys
 
 # Custom modules
-import _version, string_ops, auth_local, auth_ravello, user_interface
+from modules import string_ops as c
+from modules import auth_local, auth_ravello, user_interface, cfg
 
 
 def main():
     """Parse cmdline args, configure prefs, login, and start captive UI."""
     
-    ravshelloVersion = "ravshello v{} last mod {}".format(
-        _version.__version__, _version.__date__)
-    
     # Setup parser
-    prog = 'ravshello'
     description = ("Interface with Ravello Systems to create & manage apps "
                    "hosted around the world")
     epilog = ("Version info: {}\n"
               "To report bugs/RFEs: github.com/ryran/ravshello/issues "
-              "or rsaw@redhat.com").format(ravshelloVersion)
+              "or rsaw@redhat.com").format(cfg.version)
     p = argparse.ArgumentParser(
-        prog=prog, description=description, add_help=False, epilog=epilog,
+        prog=cfg.prog, description=description, add_help=False, epilog=epilog,
         formatter_class=argparse.RawDescriptionHelpFormatter)
     
     # Setup groups for help page:
@@ -70,24 +67,25 @@ def main():
         '-n', '--nocolor', dest='enableColor', action='store_false',
         help="Disable all color terminal enhancements")
     grpU.add_argument('--cfgdir', dest='userCfgDir', metavar='CFGDIR',
-        default='~/.ravshello',
+        default=cfg.defaultUserCfgDir,
         help=("Explicitly specify path to user config directory "
-              "(default: '~/.ravshello/')"))
+              "(default: '{}')".format(cfg.defaultUserCfgDir)))
     grpU.add_argument('--cfgfile', dest='cfgFileName', metavar='CFGFILE',
-        default='config.yaml',
+        default=cfg.defaultUserCfgFile,
         help=("Explicitly specify basename of optional yaml config file "
-              "containing login credentials, etc (default: 'config.yaml')"))
+              "containing login credentials, etc (default: '{}')"
+              .format(cfg.defaultUserCfgFile)))
     grpU.add_argument(
         '--clearprefs', dest='clearPreferences', action='store_true',
         help="Delete prefs.bin in user config directory before starting")
     grpU.add_argument(
-        '-q', '--quiet', dest='enableVerboseMessages', action='store_false',
+        '-q', '--quiet', dest='enableVerbose', action='store_false',
         help="Hide verbose messages during startup")
     grpU.add_argument(
         '-d', '--debug', dest='enableDebugging', action='store_true',
         help="Turn on debugging features to help troubleshoot a problem")
     grpU.add_argument(
-        '-V', '--version', action='version', version=ravshelloVersion)
+        '-V', '--version', action='version', version=cfg.version)
     
     # Admin-only opts:
     grpA.add_argument(
@@ -108,27 +106,29 @@ def main():
               "command to execute instead of entering the interactive shell"))
     
     # Build out options namespace
+    cfg.opts = rOpt = p.parse_args()
     
-    rOpt = p.parse_args()
+    # Halp-quit
     if rOpt.showHelp:
         p.print_help()
         sys.exit()
+    
+    # Join together all cmdline args
     rOpt.cmdlineArgs = " ".join(rOpt.cmdlineArgs)
     
-    rOpt.c = c = string_ops.Printer(rOpt.enableColor,
-                                    rOpt.enableVerboseMessages)
+    # Setup color/verbosity
+    c.enableColor = rOpt.enableColor
+    c.enableVerbose = rOpt.enableVerbose
     
     # Trigger -a if -A was called
     if rOpt.showAllApps:
         rOpt.enableAdminFuncs = True
-     
-    rOpt.ravshelloVersion = ravshelloVersion
     
     # Expand userCfgDir in case of tildes; set to default if missing specified dir
     if os.path.isdir(os.path.expanduser(rOpt.userCfgDir)):
         rOpt.userCfgDir = os.path.expanduser(rOpt.userCfgDir)
     else:
-        rOpt.userCfgDir = os.path.expanduser('~/.ravshello')
+        rOpt.userCfgDir = os.path.expanduser(cfg.defaultUserCfgDir)
     
     try:
         # Read yaml config to dictionary
@@ -148,20 +148,9 @@ def main():
     else:
         rOpt.cfgFile['sshKeyFile'] = None
     
-    # Learner mode can only create apps from blueprints which have
-    # one of these strings in their description
-    rOpt.learnerBlueprintTag = [
-        "#is_learner_blueprint",
-        "#learner_bp",
-        ]
-    
-    # More learner mode rules
-    rOpt.maxLearnerPublishedApps = 3
-    rOpt.maxLearnerActiveVms = 8
-    
     print(c.BOLD(
-        "Welcome to ravshello, "
-        "a shell to provision & manage machines with Ravello!"))
+        "Welcome to {}, "
+        "a shell to provision & manage machines with Ravello!".format(cfg.prog)))
     
     # Liftoff
     # 1.) Establish a local user name to use in ravshello
@@ -170,15 +159,14 @@ def main():
     #       - To construct names for new apps
     #       - To restrict which apps can be seen
     #       - To determine if admin functionality is unlockable (assuming -a or -A)
-    rOpt.user = auth_local.authorize_user(rOpt)
+    cfg.user = auth_local.authorize_user()
     
     # 2.) Use ravello_sdk.RavelloClient() object to log in to Ravello
-    rClient = auth_ravello.login(rOpt)
+    cfg.rClient = auth_ravello.login()
     
     # 3.) Launch the main configShell user interface
-    #     Pass it the rOpt namespace full of all our options
-    #     Also of course pass it the RavelloClient() object
-    user_interface.main(rOpt, rClient)
+    #     It will read options and objects from the cfg module
+    user_interface.main()
 
 
 if __name__ == '__main__':
