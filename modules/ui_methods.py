@@ -6,11 +6,18 @@
 from __future__ import print_function
 from getpass import getpass
 from datetime import datetime, date
-from os import path, makedirs, chmod, remove
-from time import time
+from os import path, makedirs, chmod, remove, environ
+from time import time, sleep
+from pydoc import pipepager
+from tempfile import NamedTemporaryFile
+from distutils.spawn import find_executable
 from sys import stdout
+import subprocess
 import json
 
+# Custom modules
+from . import cfg
+from . import string_ops as c
 
 def get_passphrase(prompt="Enter passphrase: ", defaultPass=None, confirm=False):
     """Prompt for a passphrase, allowing pre-populated *defaultPass*."""
@@ -102,6 +109,52 @@ def prettify_json(input):
     return str(json.dumps(input, indent=4))
 
 
+def print_obj(obj, desc, output='@EDITOR', tmpPrefix='', suffix='.json'):
+    """Send *obj* to pager/terminal/subprocess/file."""
+    tmpPrefix += '-'
+    if suffix == '.json' and not isinstance(obj, str):
+        obj = prettify_json(obj)
+    if output == '@pager':
+        print(c.yellow("Printing {} to pager . . .\n".format(desc)))
+        pipepager(obj, cmd='less -R')
+    elif output == '@term':
+        print(c.yellow("Printing {} to terminal . . .\n".format(desc)))
+        print(obj)
+    elif output == '@EDITOR':
+        if environ.has_key('RAVSH_EDITOR') and find_executable(environ['RAVSH_EDITOR']):
+            cmd = environ['RAVSH_EDITOR']
+        elif environ.has_key('EDITOR') and find_executable(environ['EDITOR']):
+            cmd = environ['EDITOR']
+        elif environ.has_key('DISPLAY') and find_executable('gvim'):
+            cmd = 'gvim'
+        elif find_executable('vim'):
+            cmd = 'vim'
+        else:
+            print(c.yellow("Printing {} to pager . . .\n".format(desc)))
+            pipepager(obj, cmd='less -R')
+            return
+        print(c.yellow("Saving {} to tmpfile & opening w/cmd '{}' . . .\n".format(desc, cmd)))
+        tmp = NamedTemporaryFile(prefix=tmpPrefix, suffix=suffix, delete=False)
+        tmp.write(obj)
+        tmp.flush()
+        subprocess.call([cmd, tmp.name])
+    else:
+        if suffix:
+            output += suffix
+        try:
+            prepare_file_for_writing(output)
+        except:
+            return
+        try:
+            with open(output, 'w') as f:
+                f.write(obj)
+        except IOError as e:
+            print(c.RED("Problem exporting {} to file: '{}'\n"
+                        "  {}\n".format(desc, output, e)))
+            return
+        print(c.green("Exported {} to file: '{}'\n".format(desc, output)))
+
+
 def iterate_json_keys_for_value(jsonObj, key, value):
     """Return True if *jsonObj* contains a toplevel *key* set to *value*."""
     for i in jsonObj:
@@ -174,248 +227,3 @@ def expand_secs_to_ywdhms(seconds):
                 unit = unit.rstrip('s')
             result.append("{} {}".format(value, unit))
     return ', '.join(result)
-
-
-class RavelloCache(object):
-    """Provide a way to locally-cache lookups of apps, users, events, etc."""
-    
-    def __init__(self, rClient):
-        """Initialize using *client*, an instance of ravello_sdk.RavelloClient()."""
-        self.r = rClient
-        self.bpCache = {}
-        self.appCache = {}
-        self.userCache = {}
-        self.alertCache = {}
-        self.shareCache = {}
-    
-    def update_bp_cache(self):
-        self._bpCache_tstamp = time()
-        self.bpCache = {}
-        for b in self.r.get_blueprints():
-            self.bpCache[b['id']] = b
-    
-    def purge_bp_cache(self):
-        self.bpCache = {}
-    
-    def get_bp(self, bpId):
-        bpId = int(bpId)
-        try:
-            ts = self._bpCache_tstamp
-        except:
-            self.update_bp_cache()
-        else:
-            if get_timestamp_proximity(ts) < -120:
-                self.update_bp_cache()
-        if bpId in self.bpCache:
-            return self.bpCache[bpId]
-        else:
-            return None
-    
-    def get_bps(self):
-        try:
-            ts = self._bpCache_tstamp
-        except:
-            self.update_bp_cache()
-        else:
-            if get_timestamp_proximity(ts) < -120:
-                self.update_bp_cache()
-        return self.bpCache.values()
-    
-    def update_app_cache(self, appId=None):
-        if appId:
-            self.appCache[appId] = {}
-            self.appCache[appId]['definition'] = self.r.get_application(appId)
-            self.appCache[appId]['ts'] = time()
-        else:
-            for appId in self.appCache:
-                try:
-                     a = self.r.get_application(appId)
-                except:
-                    continue
-                else:
-                    self.appCache[appId] = {}
-                    self.appCache[appId]['definition'] = a
-                    self.appCache[appId]['ts'] = time()
-    
-    def purge_app_cache(self, appId=None):
-        if appId:
-            if appId in self.appCache:
-                del self.appCache[appId]
-        else:
-            self.appCache = {}
-    
-    def get_app(self, appId):
-        if appId not in self.appCache or get_timestamp_proximity(self.appCache[appId]['ts']) < -60:
-            self.update_app_cache(appId)
-        return self.appCache[appId]['definition']
-    
-    def update_user_cache(self):
-        self._userCache_tstamp = time()
-        self.userCache = {}
-        for u in self.r.get_users():
-            self.userCache[u['id']] = u
-    
-    def purge_user_cache(self):
-        self.userCache = {}
-    
-    def get_user(self, userId):
-        try:
-            ts = self._userCache_tstamp
-        except:
-            self.update_user_cache()
-        else:
-            if get_timestamp_proximity(ts) < -120:
-                self.update_user_cache()
-        if userId in self.userCache:
-            return self.userCache[userId]
-        else:
-            return None
-    
-    def get_users(self):
-        try:
-            ts = self._userCache_tstamp
-        except:
-            self.update_user_cache()
-        else:
-            if get_timestamp_proximity(ts) < -120:
-                self.update_user_cache()
-        return self.userCache.values()
-    
-    def update_alert_cache(self):
-        self.alertCache = {}
-        for alert in self.r.get_alerts():
-            a = {
-                'userId': alert['userId'],
-                'alertId': alert['id'],
-                }
-            try:
-                self.alertCache[alert['eventName']].append(a)
-            except:
-                self.alertCache[alert['eventName']] = [a]
-        self.alertCache['_timestamp'] = time()
-    
-    def purge_alert_cache(self):
-        self.alertCache = {}
-    
-    def get_alerts_for_event(self, eventName):
-        if not len(self.alertCache):
-            self.update_alert_cache()
-        if eventName in self.alertCache:
-            if get_timestamp_proximity(self.alertCache['_timestamp']) < -120:
-                self.update_alert_cache()
-            return self.alertCache[eventName]
-        else:
-            return None
-    
-    def update_share_cache(self):
-        self._shareCache_tstamp = time()
-        self.shareCache = {}
-        for s in self.r.get_shares():
-            self.shareCache[s['id']] = s
-    
-    def purge_share_cache(self, shareId=None):
-        if shareId:
-            if shareId in self.shareCache:
-                del self.shareCache[shareId]
-        else:
-            self.shareCache = {}
-    
-    def get_share(self, shareId):
-        try:
-            ts = self._shareCache_tstamp
-        except:
-            self.update_share_cache()
-        else:
-            if get_timestamp_proximity(ts) < -120:
-                self.update_share_cache()
-        if shareId in self.shareCache:
-            return self.shareCache[shareId]
-        else:
-            return None
-    
-    def get_shares(self):
-        try:
-            ts = self._shareCache_tstamp
-        except:
-            self.update_share_cache()
-        else:
-            if get_timestamp_proximity(ts) < -120:
-                self.update_share_cache()
-        return self.shareCache.values()
-    
-    def get_application_details(self, app):
-        """Return details for all VMs in application with ID *app*."""
-        appDefinition = self.r.get_application(app, aspect='deployment')
-        if not appDefinition['published']:
-            return None, None, None
-        vmDetails = []
-        for vm in appDefinition['deployment']['vms']:
-            vmDict = {
-                'name': vm['name'],
-                'state': vm['state'],
-                'ssh': {
-                    'port': '',
-                    'fqdn': '',
-                    },
-                'vnc': '',
-                'nics': [],
-                'hostnames': [],
-                }
-            try:
-                vmDict['hostnames'] = vm['hostnames']
-            except:
-                pass
-            if vm['state'] == 'STARTED':
-                try:
-                    vmDict['vnc'] = self.r.get_vnc_url(app, vm['id'])
-                except:
-                    pass
-                if vm.has_key('networkConnections'):
-                    for interface in vm['networkConnections']:
-                        i = {
-                            'name': interface['name'],
-                            'ip_Elastic': '',
-                            'ip_Public': '',
-                            'ip_Forwarder': '',
-                            'ip_Private': '',
-                            'ip_Additional': [],
-                            'fqdn': '',
-                            'services': [],
-                            }
-                        if interface['ipConfig']['hasPublicIp']:
-                            try:
-                                i['ip_Elastic'] = interface['ipConfig']['elasticIpAddress']
-                            except:
-                                i['ip_Public'] = interface['ipConfig']['publicIp']
-                        elif interface['ipConfig'].has_key('publicIp'):
-                            i['ip_Forwarder'] = interface['ipConfig']['publicIp']
-                        if interface['ipConfig'].has_key('fqdn'):
-                            i['fqdn'] = interface['ipConfig']['fqdn']
-                        if interface['ipConfig'].has_key('autoIpConfig'):
-                            i['ip_Private'] = interface['ipConfig']['autoIpConfig']['allocatedIp']
-                        elif interface['ipConfig'].has_key('staticIpConfig'):
-                            i['ip_Private'] = interface['ipConfig']['staticIpConfig']['ip']
-                        if interface.has_key('additionalIpConfig'):
-                            for addtlIp in interface['additionalIpConfig']:
-                                if addtlIp.has_key('staticIpConfig'):
-                                    i['ip_Additional'].append(addtlIp['staticIpConfig']['ip'])
-                        if vm.has_key('suppliedServices'):
-                            for service in vm['suppliedServices']:
-                                if service['external'] and service['useLuidForIpConfig'] and interface['ipConfig']['id'] == service['ipConfigLuid'] and not service['name'].startswith('dummy'):
-                                    if service['name'] == 'ssh' and not vmDict['ssh']['port']:
-                                        vmDict['ssh']['port'] = " -p {}".format(service['externalPort'])
-                                        vmDict['ssh']['fqdn'] = i['fqdn']
-                                    s = {
-                                        'name': service['name'],
-                                        'externalPort': service['externalPort'],
-                                        'protocol': service['protocol'],
-                                        'portRange': service['portRange'],
-                                        }
-                                    i['services'].append(s)
-                        vmDict['nics'].append(i)
-            vmDetails.append(vmDict)
-        try:
-            expirationTime = sanitize_timestamp(appDefinition['deployment']['expirationTime'])
-        except:
-            expirationTime = None
-        return vmDetails, appDefinition['deployment']['cloudRegion']['name'], expirationTime
