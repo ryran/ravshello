@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright 2015 Ravshello Authors
+# Copyright 2015, 2017 Ravshello Authors
 # License: Apache License 2.0 (see LICENSE or http://apache.org/licenses/LICENSE-2.0.html)
 
 # Modules from standard library
@@ -7,13 +7,16 @@ from __future__ import print_function
 import pwd
 import os
 
-def authorize_user(rOpt):
-    c = rOpt.c
-    cfgNick = rOpt.cfgFile.get('nickname', None)
+# Custom modules
+from . import string_ops as c
+from . import cfg
+
+def authorize_user():
+    cfgNick = cfg.opts.cfgFile.get('nickname', None)
     c.verbose("\nDetermining nickname . . .")
     c.verbose("  (Nickname will be prepended to names of any apps you create)")
     c.verbose("  (Nickname will be used to restrict which app names you can see)")
-    if rOpt.promptNickname:
+    if cfg.opts.promptNickname:
         nick = raw_input(c.CYAN("  Enter nickname: "))
         user = c.replace_bad_chars_with_underscores(nick)
         if nick != user:

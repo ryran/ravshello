@@ -4,9 +4,9 @@ app=${0##*/}
 
 # Don't run as root
 if [[ ${EUID} == 0 ]]; then
-    echo "DON'T run this script as root"
-    echo "Aborting"
-    exit 1
+    echo "Warning: this script does not need to be run as root"
+    echo "Press Enter to continue as root or Ctrl-c to cancel"
+    read
 fi
 
 # Require bash v4
@@ -156,19 +156,19 @@ else
     continue_or_quit "Warning: pip install failed"
 fi
 
+Print C "\nCopying source from CWD"
+cp -a * ${dir}
+
 Print C "\nDownloading rsaw's stable fork of ravello_sdk"
 Print b
-curl -o ${dir}/ravello_sdk.py https://raw.githubusercontent.com/ryran/python-sdk/ravshello-stable/lib/ravello_sdk.py
+curl -o ${dir}/modules/ravello_sdk.py https://raw.githubusercontent.com/ryran/python-sdk/ravshello-stable/lib/ravello_sdk.py
 Print 0
 
 Print C "\nDownloading rsaw's stable + modified fork of configshell_fb"
 Print b
 git clone https://github.com/ryran/configshell-fb.git ${dir}/rsaw-configshell-fb
-ln -s rsaw-configshell-fb/configshell_fb ${dir}/configshell_fb
+ln -s ../rsaw-configshell-fb/configshell_fb ${dir}/modules/configshell_fb
 Print 0
-
-Print C "\nCopying source from CWD"
-cp -a * ${dir}
 
 Print G "\nDONE WITH DEPENDENCY RESOLUTION!\n"
 
