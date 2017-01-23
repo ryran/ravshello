@@ -2049,7 +2049,7 @@ class App(ConfigNode):
                 print("     Internal DNS Name:  ", end="")
                 print(*vm['hostnames'], sep=', ')
             # Setup empty ssh dict
-            vm['ssh'] = {}
+            vm['ssh'] = {'port': '', 'fqdn': ''}
             # Compile and print details on each network interface
             if vm.has_key('networkConnections'):
                 for nic in vm['networkConnections']:
@@ -2083,12 +2083,13 @@ class App(ConfigNode):
                     # Check for services
                     if vm.has_key('suppliedServices'):
                         for svc in vm['suppliedServices']:
-                            if svc['external'] and svc['useLuidForIpConfig'] and nic['ipConfig']['id'] == svc['ipConfigLuid'] and not svc['name'].startswith('dummy'):
-                                if svc['name'] == 'ssh' and not vm['ssh']:
-                                    vm['ssh']['port'] = " -p {}".format(svc['externalPort'])
-                                    vm['ssh']['fqdn'] = fqdn
+                            if svc['external'] and svc.has_key('externalPort') and svc['useLuidForIpConfig'] and nic['ipConfig']['id'] == svc['ipConfigLuid'] and not svc['name'].startswith('dummy'):
                                 s = "{svc} port {exPort}/{proto} maps to internal port {inPort}".format(
                                     svc=svc['name'], exPort=svc['externalPort'], proto=svc['protocol'], inPort=svc['portRange'])
+                                if svc['name'] == 'ssh' and not vm['ssh']['fqdn']:
+                                    vm['ssh']['fqdn'] = fqdn
+                                    if svc['externalPort'] != 22:
+                                        vm['ssh']['port'] = " -p {}".format(svc['externalPort'])
                                 services.append(s)
                     # Finally, print:
                     print("     NIC {}".format(nic['name']))
@@ -2104,7 +2105,7 @@ class App(ConfigNode):
                     for s in services:
                         print("       External Svc:     {}".format(s))
             # Print ssh command
-            if vm['ssh'].has_key('fqdn'):
+            if vm['ssh']['fqdn']:
                 ssh = c.cyan("ssh{}{} root@{}".format(sshKey, vm['ssh']['port'], vm['ssh']['fqdn']))
                 print("     SSH Command:        {}".format(ssh))
             # Print VNC url
