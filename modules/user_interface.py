@@ -2104,17 +2104,19 @@ class App(ConfigNode):
                         print("       Public DNAT:      {} ({})".format(ip_Forwarder, fqdn))
                     for s in services:
                         print("       External Svc:     {}".format(s))
-            # Print ssh command
-            if vm['ssh']['fqdn']:
-                ssh = c.cyan("ssh{}{} root@{}".format(sshKey, vm['ssh']['port'], vm['ssh']['fqdn']))
-                print("     SSH Command:        {}".format(ssh))
-            # Print VNC url
-            try:
-                vnc = c.blue(rClient.get_vnc_url(self.appId, vm['id']))
-            except:
-                pass
-            else:
-                print("     VNC Web URL:        {}".format(vnc))
+            if vm['state'] in ['STARTING', 'STARTED']:
+                # Print ssh command
+                if vm['ssh']['fqdn']:
+                    ssh = c.cyan("ssh{}{} root@{}".format(sshKey, vm['ssh']['port'], vm['ssh']['fqdn']))
+                    print("     SSH Command:        {}".format(ssh))
+            if vm['state'] in ['STARTED']:
+                # Print VNC url
+                try:
+                    vnc = c.blue(rClient.get_vnc_url(self.appId, vm['id']))
+                except:
+                    pass
+                else:
+                    print("     VNC Web URL:        {}".format(vnc))
             print()
         return allVmsAreStarted, allVmsAreStopped
     
