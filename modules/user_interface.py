@@ -69,9 +69,9 @@ def _complete_path(path, stat_fn):
     return sorted(filtered,
                   key=lambda s: '~'+s if s.endswith('/') else s)
 
-def _complete_print_obj(parameters, text, current_param):
+def _complete_print_obj(parameters, text, current_param, param_name='outputFile'):
     """For ui_complete_*() meths that only support standard 'outputFile=' arg."""
-    if current_param != 'outputFile':
+    if current_param != param_name:
         return []
     completions = _complete_path(text, S_ISREG)
     if len(completions) == 1 and not completions[0].endswith('/'):
@@ -184,6 +184,7 @@ class RavelloRoot(ConfigNode):
             Events(self)
             # Images(self)
             Shares(self)
+            Keypairs(self)
         Applications(self)
     
     def summary(self):
@@ -2985,3 +2986,211 @@ class Share(ConfigNode):
             return [completions[0] + ' ']
         else:
             return completions
+
+class Keypairs(ConfigNode):
+    """Setup the 'keypairs' node.
+    
+    Path: /keypairs/
+    """
+    
+    def __init__(self, parent):
+        ConfigNode.__init__(self, 'keypairs', parent)
+        self.isPopulated = False
+        self.numberOfKps = 0
+    
+    def summary(self):
+        if self.isPopulated:
+            return ("{} keypairs".format(self.numberOfKps), None)
+        else:
+            return ("To populate, run: refresh", False)
+    
+    def refresh(self):
+        self._children = set([])
+        self.numberOfKps = 0
+        for kp in rClient.get_keypairs():
+            Keypair(kp, self)
+        self.isPopulated = True
+    
+    def ui_command_refresh(self):
+        """
+        Poll Ravello for list of key pairs.
+        
+        Not doing this automatically speeds startup time.
+        """
+        print(c.yellow("\nRefreshing all key pairs data . . . "), end='')
+        stdout.flush()
+        self.refresh()
+        print(c.green("DONE!\n"))
+    
+    def ui_command_upload_new_pubkey(self, inputFile='@prompt', name='@prompt'):
+        """
+        Upload a new public key to the account.
+        
+        By specifying *inputFile* on the command-line, you can use a full path,
+        i.e., choices are not restricted to ~/.ssh dir.
+        
+        Optionally specify *name* on the command-line to avoid prompting.
+        """
+        inputFile = self.ui_eval_param(inputFile, 'string', '@prompt')
+        name = self.ui_eval_param(name, 'string', '@prompt')
+        if inputFile == '@prompt':
+            print()
+            sshPubKeys = glob(path.expanduser('~/.ssh/') + 'id_*.pub')
+            if not len(sshPubKeys):
+                print(c.red("There are not any 'id_*.pub' files in your ~/.ssh directory!\n"))
+                print("To upload an ssh pubkey file from some other location, pass it as an argument"
+                      "to this command, e.g.: `{}`\n"
+                      .format(c.BOLD('/keypairs upload_new_pubkey /path/to/file')))
+                return
+            # Enumerate through list of files
+            print(c.BOLD("Available public key files in ~/.ssh:"))
+            for i, key in enumerate(sshPubKeys):
+                print("  {})  {}".format(c.cyan(i), key))
+            # Prompt for pubkey selection
+            selection = ui.prompt_for_number(
+                c.CYAN("\nEnter the number of the pubkey file you wish to upload: "),
+                endRange=i)
+            inputFile = sshPubKeys[selection]
+        try:
+            with open(inputFile) as f:
+                pubkeyData = f.read()
+        except:
+            print(c.RED("Problem reading pubkey file!\n"))
+            raise
+        if name == '@prompt':
+            name = raw_input(c.CYAN("\nEnter a unique name for your new public key: "))
+            if len(name):
+                if any(name == k['name'] for k in rClient.get_keypairs()):
+                    print(c.red("\nA key by that name already exists in your account!\n"))
+                    return
+            else:
+                print(c.red("\nYou must enter a name!\n"))
+                return
+        req = {'name': name, 'publicKey': pubkeyData.strip()}
+        try:
+            kp = rClient.create_keypair(req)
+        except:
+            print(c.red("\nProblem uploading new public key!\n"))
+            raise
+        print(c.green("\nSUCCESS! New public key '{}' ({}) uploaded!".format(kp['name'], kp['id'])))
+        Keypair(kp, self)
+        print()
+    
+    def ui_complete_upload_new_pubkey(self, parameters, text, current_param):
+        return _complete_print_obj(parameters, text, current_param, param_name='inputFile')
+
+
+class Keypair(ConfigNode):
+    """Setup the dynamically-named keypair node.
+    
+    Path: /keypairs/{NAME}/
+    """
+    
+    def __init__(self, kp, parent):
+        self.kpString = c.replace_bad_chars_with_underscores(kp['name'])
+        ConfigNode.__init__(self, self.kpString, parent)
+        parent.numberOfKps += 1
+        self.kp = kp
+        if kp.has_key('creator'):
+            user = kp['creator']['nickname']
+        else:
+            user = "(NULL)"
+        if kp.has_key('creationTime'):
+            _date = ui.convert_ts_to_date(kp['creationTime'], showHours=False)
+        else:
+            _date = "(NULL)"
+        self.status = "'{name}' ({id}) created by {user} on {date}".format(
+            name=kp['name'],
+            id=kp['id'],
+            user=user,
+            date=_date)
+    
+    def summary(self):
+        return (self.status, None)
+    
+    def ui_command_print_def(self, outputFile='@EDITOR'):
+        """
+        Pretty-print JSON definition of public key.
+        
+        Note: unfortunately the API doesn't return actual public key data.
+        
+        Optionally specify *outputFile* as @term or @pager or as a relative /
+        absolute path on the local system (tab-completion available). Default
+        value of '@EDITOR' checks environment for a RAVSH_EDITOR variable, and
+        failing that, EDITOR, and failing that, it falls back to gvim, then
+        vim, then less.
+        """
+        print()
+        outputFile = self.ui_eval_param(outputFile, 'string', '@EDITOR')
+        description = "key pair definition for '{}' (/keypairs/{})".format(
+            self.kp['name'], self.kp['id'])
+        ui.print_obj(self.kp, description, outputFile,
+            tmpPrefix='keypair={}'.format(self.kp['id']))
+    
+    def ui_complete_print_def(self, parameters, text, current_param):
+        return _complete_print_obj(parameters, text, current_param)
+    
+    def delete(self):
+        try:
+            rClient.delete_keypair(self.kp['id'])
+        except:
+            print(c.red("Problem deleting public key!\n"))
+            raise
+        self.parent.numberOfKps -= 1
+        print(c.green("Deleted public key '{}' ({})\n".format(self.kp['name'], self.kp['id'])))
+        self.parent.remove_child(self)
+    
+    def ui_command_delete(self, noconfirm='false'):
+        """
+        Delete a public key.
+        
+        By default, confirmation will be required to delete the key.
+        Disable prompt with noconfirm=true.
+        """
+        noconfirm = self.ui_eval_param(noconfirm, 'bool', False)
+        print()
+        if not noconfirm:
+            print(c.yellow("This will delete the '{}' public key from your account in Ravello"
+                           .format(self.kp['name'])))
+            response = raw_input(c.CYAN("Continue with key deletion? [y/N] "))
+            print()
+        if noconfirm or response == 'y':
+            self.delete()
+        else:
+            print("Leaving key pair intact\n")
+    
+    def ui_complete_delete(self, parameters, text, current_param):
+        if current_param in ['noconfirm']:
+            completions = [a for a in ['false', 'true']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
+    
+    def ui_command_rename(self, name='@prompt'):
+        """
+        Rename a public key.
+        """
+        name = self.ui_eval_param(name, 'string', '@prompt')
+        if name == '@prompt':
+            name = raw_input(c.CYAN("\nEnter a new unique name for your public key: "))
+            if len(name):
+                if any(name == k['name'] for k in rClient.get_keypairs()):
+                    print(c.red("\nA key by that name already exists in your account!\n"))
+                    return
+            else:
+                print(c.red("\nYou must enter a name!\n"))
+                return
+        req = {'name': name, 'id': self.kp['id']}
+        try:
+            kp = rClient.update_keypair(req)
+        except:
+            print(c.red("\nProblem renaming public key!\n"))
+            raise
+        print(c.green("\nSUCCESS! Public key {} renamed from '{}' to '{}'!".format(self.kp['id'], self.kp['name'], kp['name'])))
+        Keypair(kp, self.parent)
+        self.parent.remove_child(self)
+        print()
