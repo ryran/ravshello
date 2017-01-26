@@ -1782,6 +1782,17 @@ class App(ConfigNode):
     
     def summary(self):
         app = rCache.get_app(self.appId)
+        owner = app['owner']
+        _date = ui.convert_ts_to_date(app['creationTime'], showHours=False)
+        try:
+            currentDescription = app['description']
+            m = re.search('_{(.*)}_', currentDescription)
+            if m:
+                note = "; {}".format(m.group(1))
+            else:
+                note = ""
+        except:
+            note = ""
         if app['published']:
             region = app['deployment']['regionId']
             totalErrorVms = app['deployment']['totalErrorVms']
@@ -1801,18 +1812,19 @@ class App(ConfigNode):
                     hazHappy = True
             if totalErrorVms > 0:
                 hazHappy = False
-            try:
-                currentDescription = app['description']
-                m = re.search('_{(.*)}_', currentDescription)
-                if m:
-                    note = "; {}".format(m.group(1))
-                else:
-                    note = ""
-            except:
-                note = ""
-            return ("{} in {}{}".format(appState, region, note), hazHappy)
+            status = "{owner} created on {date}; {state} in {region}{note}".format(
+                owner=owner,
+                date=_date,
+                state=appState,
+                region=region,
+                note=note) 
         else:
-            return ("Unpublished draft", None)
+            status = "{owner} created on {date}; Unpublished draft{note}".format(
+                owner=owner,
+                date=_date,
+                note=note)
+            hazHappy = None
+        return (status, hazHappy)
     
     def print_message_app_not_published(self):
         print(c.red("Application has not been published yet!\n"))
