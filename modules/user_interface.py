@@ -1330,9 +1330,19 @@ class Bp(ConfigNode):
     Path: /blueprints/{BLUEPRINT_NAME}/
     """
     def __init__(self, bpName, parent, bp):
-        ConfigNode.__init__(self, bpName, parent)
-        parent.numberOfBps += 1
+        try:
+            ConfigNode.__init__(self, bpName, parent)
+        except:
+            sibling = parent.get_child(bpName)
+            siblingBp = sibling.bp
+            newBpName = "zz___{}___id{}".format(bpName, sibling.bpId)
+            parent.remove_child(sibling)
+            Bp(newBpName, parent, siblingBp)
+            bpName = "zz___{}___id{}".format(bp['name'], bp['id'])
+            ConfigNode.__init__(self, bpName, parent)
         self.bpName = bpName
+        parent.numberOfBps += 1
+        self.bp = bp
         self.bpId = bp['id']
         self.bpOwner = bp['owner']
         self.creationTime = datetime.fromtimestamp(int(str(bp['creationTime'])[:-3]))
