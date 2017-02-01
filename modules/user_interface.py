@@ -129,7 +129,8 @@ def main():
         # Run args non-interactively
         if rOpt.scriptFile:
             print(c.yellow("Ignoring script file because cmdline args present\n"))
-        shell.run_cmdline(rOpt.cmdlineArgs)
+        for cmd in rOpt.cmdlineArgs:
+            shell.run_cmdline(cmd)
     elif is_admin() and rOpt.scriptFile:
         # Run script file non-interactively
         try:

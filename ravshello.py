@@ -105,9 +105,10 @@ def main():
               "(commands will be executed instead of entering the "
               "interactive shell)"))
     grpA.add_argument(
-        'cmdlineArgs', metavar='COMMAND', nargs=argparse.REMAINDER,
-        help=("All remaining non-option arguments will be treated as a single "
-              "command to execute instead of entering the interactive shell"))
+        'cmdlineArgs', metavar='COMMANDS', nargs=argparse.REMAINDER,
+        help=("If any additional cmdline args are present, the interactive shell is "
+              "skipped; instead each word will be executed as a separate command "
+              "(ensure each command is quoted to protect from shell expansion!)"))
     
     # Build out options namespace
     cfg.opts = rOpt = p.parse_args()
@@ -116,9 +117,6 @@ def main():
     if rOpt.showHelp:
         p.print_help()
         sys.exit()
-    
-    # Join together all cmdline args
-    rOpt.cmdlineArgs = " ".join(rOpt.cmdlineArgs)
     
     # Setup color/verbosity
     c.enableColor = rOpt.enableColor
