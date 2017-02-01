@@ -44,7 +44,7 @@ except:
     raise
 
 # Set aside globals that will be used for code-clarity
-rOpt = user = appnamePrefix = rClient = rCache = None
+rOpt = user = appnamePrefix = rClient = rCache = rootNode = None
 
 def is_admin():
     if rOpt.enableAdminFuncs:
@@ -92,7 +92,7 @@ def get_num_learner_active_vms(learner):
 
 def main():
     # Set aside globals that will be used for code-clarity
-    global rOpt, user, appnamePrefix, rClient, rCache
+    global rOpt, user, appnamePrefix, rClient, rCache, rootNode
     rOpt = cfg.opts
     user = cfg.user
     appnamePrefix = 'k:{}__'.format(user)
@@ -117,7 +117,7 @@ def main():
     stdout.flush()
     # Start configshell
     try:
-        root_node = RavelloRoot(shell)
+        rootNode = RavelloRoot(shell)
     except:
         print(c.RED("\n  UNHANDLED EXCEPTION getting data from Ravello\n"))
         print("If problem persists, send this message with below traceback to rsaw@redhat.com")
@@ -1114,9 +1114,13 @@ class Blueprints(ConfigNode):
     
     def refresh(self):
         self._children = set([])
+        sharedWithMe = SharedBps(self)
         self.numberOfBps = self.numberOfLearnerBps = 0
         for bp in rCache.get_bps():
-            Bp(bp['name'], self, bp)
+            if rCache.get_user(bp['ownerDetails']['userId']):
+                Bp(bp, self)
+            else:
+                Bp(bp, sharedWithMe)
         self.isPopulated = True
     
     def ui_command_refresh(self):
@@ -1132,196 +1136,20 @@ class Blueprints(ConfigNode):
         stdout.flush()
         self.refresh()
         print(c.green("DONE!\n"))
+
+
+class SharedBps(ConfigNode):
+    """Setup the 'Shared_with_me' node.
     
-    def ui_command_backup_all(self, bpDir='@home'):
-        """
-        Export each & every blueprint to a JSON file.
-        
-        Optionally specify an absolute or relative path; otherwise, default
-        *bpDir* of @home maps to <CFGDIR>/blueprints. Note also that <CFGDIR>
-        defaults to '~/.ravshello/', but can be tweaked with the cmdline option
-        '--cfgdir'.
-        
-        File names are determined automatically from the blueprint name (plus an
-        extension of ".json"). Existing files are overwritten.
-        """
-        print()
-        bpDir = self.ui_eval_param(bpDir, 'string', '@home')
-        if bpDir == '@home':
-            bpDir = path.join(rOpt.userCfgDir, 'blueprints')
-        bpDir = path.expanduser(bpDir)
-        if not path.exists(bpDir):
-            try:
-                makedirs(bpDir, 0775)
-            except OSError as e:
-                print(c.RED("Error creating bpDir!\n  {}\n".format(e)))
-                return
-        elif not path.isdir(bpDir):
-            print(c.RED("Error! Specified bpDir '{}' already exists as a regular file!\n"
-                        .format(bpDir)))
-            return
-        for bp in rClient.get_blueprints():
-            f = path.join(bpDir, bp['name'] + '.json')
-            try:
-                with open(f, 'w') as outfile:
-                    json.dump(rClient.get_blueprint(bp['id']), outfile, indent=4)
-            except IOError as e:
-                print(c.red("Problem exporting bp '{}'\n  {}".format(bp['name'], e)))
-                continue
-            print(c.green("Exported bp to file: '{}'".format(f)))
-        print()
+    Path: /blueprints/Shared_with_me
+    """
     
-    def ui_complete_backup_all(self, parameters, text, current_param):
-        if current_param != 'bpDir':
-            return []
-        completions = _complete_path(text, S_ISDIR)
-        if len(completions) == 1 and not completions[0].endswith('/'):
-            completions = [completions[0] + ' ']
-        return completions
+    def __init__(self, parent):
+        ConfigNode.__init__(self, 'Shared_with_me', parent)
+        self.numberOfBps = self.numberOfLearnerBps = 0
     
-    def create_bp_from_json_obj(self, bpDefinition, bpFileName=None, name='@prompt', desc='@prompt'):
-        """Create a new blueprint from a json blueprint defition."""
-        def _delete_temporary_app(appId, appName):
-            try:
-                rClient.delete_application(newApp['id'])
-            except:
-                print("\nNotice: Unable to delete temporary unpublished application '{}'\n"
-                      .format(appName))
-        
-        # Set default bp name from bp json or filename
-        # Set default description different depending on whether bp created from file or existing bp
-        if not bpFileName:
-            # Generate a new blueprint name suggestion based off current one
-            bpName = ravello_sdk.new_name(rClient.get_blueprints(), bpDefinition['name'] + '_')
-            bpDescription = "Created by {} as a copy of blueprint '{}'".format(user, bpDefinition['name'])
-        else:
-            bpName = path.basename(bpFileName)
-            bpDescription = "Created by {} from blueprint file '{}'".format(user, bpName)
-            bpName = bpName.rstrip('.json')
-        
-        # Prompt for a blueprint name if necessary
-        if name == '@prompt':
-            b = raw_input(c.CYAN("\nEnter a unique name for your new blueprint [{}]: ".format(bpName)))
-            if len(b): bpName = b
-        elif name == '@auto':
-            pass
-        else:
-            bpName = name
-        
-        # Create temporary application from bp
-        appName = appnamePrefix + 'BpTempApp'
-        appName = ravello_sdk.new_name(rClient.get_applications(), appName + '_')
-        appDescription = "Temporary app used to restore blueprint from file"
-        appDesign = bpDefinition['design']
-        appReq = {'name' : appName, 'description' : appDescription, 'design': appDesign}
-        try:
-            newApp = rClient.create_application(appReq)
-        except:
-            print(c.red("\nUnable to create temporary application '{}'! "
-                        "Cannot continue with restore!\n".format(appName)))
-            raise
-        
-        # Prompt for description if necessary
-        if desc == '@prompt':
-            d = raw_input(c.CYAN("\nOptionally enter a description for your new blueprint [{}]: ".format(bpDescription)))
-            if len(d): bpDescription = d
-        elif desc == '@auto':
-            pass
-        else:
-            bpDescription = desc
-        
-        # Create request dictionary and post new bp
-        req = {"applicationId": newApp['id'], "blueprintName": bpName, "offline": "true", "description": bpDescription}
-        try:
-            newBp = rClient.create_blueprint(req)
-        except:
-            print(c.red("\nProblem creating new blueprint!\n"))
-            _delete_temporary_app(newApp['id'], appName)
-            raise
-        print(c.green("\nSUCCESS! New blueprint '{}' created!".format(bpName)))
-        
-        # Delete temp app
-        _delete_temporary_app(newApp['id'], appName)
-        # Add new bp to directory tree
-        Bp("%s" % newBp['name'], self, newBp['id'], newBp['creationTime'])
-        print()
-    
-    def ui_command_import_from_file(self, inputFile='@prompt',
-            name='@prompt', desc='@prompt'):
-        """
-        Create a blurprint from JSON file in <CFGDIR>/blueprints.
-        
-        By specifying *inputFile* on the command-line, you can use a full path,
-        i.e., choices are not restricted to <CFGDIR>/blueprints. Note also that
-        <CFGDIR> defaults to '~/.ravshello/', but can be tweaked with the
-        cmdline option '--cfgdir'.
-        
-        This command is only useful after running one of the following:
-            - backup_all
-            - backup
-            - print_def outputFile=PATH
-        
-        Optionally specify *name* and/or *desc* on the command-line to avoid
-        prompting (both default to '@prompt' and both can be set to '@auto'
-        to skip prompting).
-        """
-        inputFile = self.ui_eval_param(inputFile, 'string', '@prompt')
-        name = self.ui_eval_param(name, 'string', '@prompt')
-        desc = self.ui_eval_param(desc, 'string', '@prompt')
-        if inputFile == '@prompt':
-            print()
-            # Get a list of what is in local cache
-            c1 = subprocess.Popen(['ls', path.join(rOpt.userCfgDir, 'blueprints')],
-                                  stdout=subprocess.PIPE)
-            bpFileList = c1.communicate()[0].strip('\n').split('\n')
-            bpFileList = filter(None, bpFileList)
-            if not len(bpFileList):
-                print(c.red("There are not any blueprint files in your local cache ({})!\n"
-                            .format(path.join(rOpt.userCfgDir, 'blueprints'))))
-                print("(They would need to have been created by the `{}`, `{}`, or `{}` commands)\n"
-                      .format(c.BOLD('backup_all'), c.BOLD('backup'), c.BOLD('print_def')))
-                return
-            # Enumerate through list of files
-            print(c.BOLD("Blueprint json definitions available in {}:"
-                       .format(path.join(rOpt.userCfgDir, 'blueprints'))))
-            for i, bp in enumerate(bpFileList):
-                print("  {})  {}".format(c.cyan(i), bp))
-            # Prompt for bp selection
-            selection = ui.prompt_for_number(
-                c.CYAN("\nEnter the number of a file you wish to create a new blueprint from: "),
-                endRange=i)
-            inputFile = path.join(rOpt.userCfgDir, 'blueprints', bpFileList[selection])
-        # Load chosen blueprint def file into json obj
-        try:
-            with open(inputFile) as f:
-                bpDefinition = json.load(f)
-        except:
-            print(c.RED("Problem importing json data from file!\n"))
-            raise
-        # Make the magic happen
-        self.create_bp_from_json_obj(bpDefinition, inputFile, name, desc)
-    
-    def ui_complete_import_from_file(self, parameters, text, current_param):
-        if current_param == 'inputFile':
-            completions = _complete_path(text, S_ISREG)
-            if len(completions) == 1 and not completions[0].endswith('/'):
-                completions = [completions[0] + ' ']
-            return completions
-        elif current_param == 'name':
-            L = ['@prompt', '@auto']
-            for bp in rClient.get_blueprints():
-                L.append(bp['name'])
-            completions = [a for a in L
-                           if a.startswith(text)]
-        elif current_param == 'desc':
-            completions = [a for a in ['@prompt', '@auto']
-                           if a.startswith(text)]
-        else:
-            completions = []
-        if len(completions) == 1:
-            return [completions[0] + ' ']
-        else:
-            return completions
+    def summary(self):
+        return ("{} blueprints shared with me".format(self.numberOfBps), None)
 
 
 class Bp(ConfigNode):
@@ -1329,20 +1157,11 @@ class Bp(ConfigNode):
     
     Path: /blueprints/{BLUEPRINT_NAME}/
     """
-    def __init__(self, bpName, parent, bp):
-        try:
-            ConfigNode.__init__(self, bpName, parent)
-        except:
-            sibling = parent.get_child(bpName)
-            siblingBp = sibling.bp
-            newBpName = "zz___{}___id{}".format(bpName, sibling.bpId)
-            parent.remove_child(sibling)
-            Bp(newBpName, parent, siblingBp)
-            bpName = "zz___{}___id{}".format(bp['name'], bp['id'])
-            ConfigNode.__init__(self, bpName, parent)
-        self.bpName = bpName
+    def __init__(self, bp, parent):
+        ConfigNode.__init__(self, bp['name'], parent)
         parent.numberOfBps += 1
         self.bp = bp
+        self.bpName = bp['name']
         self.bpId = bp['id']
         self.bpOwner = bp['owner']
         self.creationTime = datetime.fromtimestamp(int(str(bp['creationTime'])[:-3]))
@@ -1351,6 +1170,10 @@ class Bp(ConfigNode):
             parent.numberOfLearnerBps += 1
         else:
             self.isLearnerBp = False
+        if parent != rootNode.get_child('blueprints'):
+            # If we are a shared blueprint
+            self.ui_command_delete = None
+            self.ui_command_find_pub_locations = None
     
     def summary(self):
         if self.creationTime.year == datetime.now().year:
@@ -1365,7 +1188,7 @@ class Bp(ConfigNode):
             happy = True
         else:
             happy = None
-        return ("{} created on {}".format(self.bpOwner, created), happy)
+        return ("{} created {}".format(self.bpOwner, created), happy)
     
     def delete(self):
         try:
@@ -1377,36 +1200,26 @@ class Bp(ConfigNode):
         self.parent.remove_child(self)
         self.parent.numberOfBps -= 1
     
-    def ui_command_delete(self, noconfirm='false', nobackup='false'):
+    def ui_command_delete(self, noconfirm='false'):
         """
         Delete a blueprint.
         
         By default, confirmation will be required to delete the blueprint.
         Disable prompt with noconfirm=true.
-        
-        By default, blueprint will automatically be saved to
-        <CFGDIR>/blueprints/<BlueprintName>.json, overwriting any existing
-        file. Disable with nobackup=true.
         """
         noconfirm = self.ui_eval_param(noconfirm, 'bool', False)
-        nobackup = self.ui_eval_param(nobackup, 'bool', False)
         print()
         if not noconfirm:
             c.slow_print(c.RED("Deleting a blueprint cannot be undone -- make sure you know what you're doing\n"))
             response = raw_input(c.CYAN("Continue with blueprint deletion? [y/N] "))
             print()
         if noconfirm or response == 'y':
-            if not nobackup:
-                print("Backing up blueprint definition to local file before deleting . . .")
-                self.ui_command_backup()
-                print("Blueprint can be recreated from file later with {} command\n"
-                      .format(c.BOLD("import_from_file")))
             self.delete()
         else:
             print("Leaving bp intact (probably a good choice)\n")
     
     def ui_complete_delete(self, parameters, text, current_param):
-        if current_param in ['noconfirm', 'nobackup']:
+        if current_param in ['noconfirm']:
             completions = [a for a in ['false', 'true']
                            if a.startswith(text)]
         else:
@@ -1443,28 +1256,6 @@ class Bp(ConfigNode):
     def ui_complete_print_def(self, parameters, text, current_param):
         return _complete_print_obj(parameters, text, current_param)
     
-    def ui_command_backup(self):
-        """
-        Export blueprint definition to a JSON file in <CFGDIR>/blueprints.
-        
-        File names are determined automatically from the blueprint name (plus an
-        extension of ".json"). Existing files are overwritten.
-        
-        To save to a specific path, use print_def command.
-        """
-        print()
-        d = path.join(rOpt.userCfgDir, 'blueprints')
-        if not path.exists(d):
-            makedirs(d, 0775)
-        f = path.join(d, self.bpName + '.json')
-        try:
-            with open(f, 'w') as outfile:
-                json.dump(rClient.get_blueprint(self.bpId), outfile, indent=4)
-        except:
-            print(c.red("Problem exporting bp '{}'".format(self.bpName)))
-            raise
-        print(c.green("Exported bp to file: '{}'\n".format(f)))
-    
     def ui_command_copy(self, name='@prompt', desc='@prompt'):
         """
         Create a copy of an existing blueprint.
@@ -1475,15 +1266,48 @@ class Bp(ConfigNode):
         """
         name = self.ui_eval_param(name, 'string', '@prompt')
         desc = self.ui_eval_param(desc, 'string', '@prompt')
-        # Get current blueprint def
-        bpDefinition = rClient.get_blueprint(self.bpId)
-        # Make the magic happen
-        self.parent.create_bp_from_json_obj(bpDefinition, name=name, desc=desc)
+        newBpDescription = "Created by {} as a copy of blueprint '{}'".format(user, self.bpName)
+        # Prompt for a blueprint name if necessary
+        if name == '@prompt':
+            b = raw_input(c.CYAN("\nEnter a unique name for your new blueprint [{}]: ".format(self.bpName)))
+            if len(b):
+                newBpName = b
+            else:
+                newBpName = self.bpName
+        elif name == '@auto':
+            newBpName = ravello_sdk.new_name(rCache.get_bps(myOrgOnly=True), self.bpName + '_')
+        else:
+            newBpName = name
+        # Prompt for description if necessary
+        if desc == '@prompt':
+            d = raw_input(c.CYAN("\nOptionally enter a description for your new blueprint [{}]: ".format(newBpDescription)))
+            if len(d):
+                newBpDescription = d
+        elif desc == '@auto':
+            pass
+        else:
+            newBpDescription = desc
+        # Create request dictionary and post new bp
+        req = {
+            "blueprintId": self.bpId,
+            "blueprintName": newBpName,
+            "description": newBpDescription,
+            "offline": True,
+            }
+        try:
+            newBp = rClient.create_blueprint(req)
+        except:
+            print(c.red("\nProblem creating new blueprint!\n"))
+            raise
+        print(c.green("\nSUCCESS! New blueprint '{}' created!".format(newBpName)))
+        # Add new bp to directory tree
+        Bp(newBp, rootNode.get_child('blueprints'))
+        print()
     
     def ui_complete_copy(self, parameters, text, current_param):
         if current_param == 'name':
             L = ['@prompt', '@auto']
-            for bp in rClient.get_blueprints():
+            for bp in rCache.get_bps():
                 L.append(bp['name'])
             completions = [a for a in L
                            if a.startswith(text)]
@@ -1618,7 +1442,7 @@ class Applications(ConfigNode):
         
         # Check for available blueprints first
         allowedBlueprints = []
-        for bp in rCache.get_bps():
+        for bp in rCache.get_bps(myOrgOnly=True):
             try:
                 description = bp['description']
             except:
@@ -1643,12 +1467,12 @@ class Applications(ConfigNode):
             baseBlueprintName = blueprint
             
         # Quit if invalid blueprint name
-        if baseBlueprintName not in allowedBlueprints or not ui.iterate_json_keys_for_value(rCache.get_bps(), 'name', baseBlueprintName):
+        if baseBlueprintName not in allowedBlueprints or not ui.iterate_json_keys_for_value(rCache.get_bps(myOrgOnly=True), 'name', baseBlueprintName):
             print(c.RED("\nInvalid blueprint name!\n"))
             return
         
         # Convert blueprint name to id
-        for bp in rCache.get_bps():
+        for bp in rCache.get_bps(myOrgOnly=True):
             if bp['name'] == baseBlueprintName:
                 baseBlueprintId = bp['id']
                 break
@@ -1722,7 +1546,7 @@ class Applications(ConfigNode):
     def ui_complete_new(self, parameters, text, current_param):
         if current_param == 'blueprint':
             allowedBlueprints = ['@prompt']
-            blueprints = rCache.get_bps()
+            blueprints = rCache.get_bps(myOrgOnly=True)
             for bp in blueprints:
                 try:
                     description = bp['description']
@@ -1747,7 +1571,7 @@ class Applications(ConfigNode):
                                if a.startswith(text)]
             else:
                 allowedBlueprints = {}
-                blueprints = rCache.get_bps()
+                blueprints = rCache.get_bps(myOrgOnly=True)
                 for bp in blueprints:
                     try:
                         description = bp['description']
@@ -2564,7 +2388,7 @@ class Vm(ConfigNode):
         print()
         outputFile = self.ui_eval_param(outputFile, 'string', '@EDITOR')
         aspect = self.ui_eval_param(aspect, 'string', '@auto')
-        if aspect == 'deployment' and not self.parent.parent.confirm_app_is_published():
+        if aspect == 'deployment' and not rootNode.get_child('apps').confirm_app_is_published():
             return
         if aspect == '@auto':
             if rClient.is_application_published(self.appId)['value']:
@@ -2600,11 +2424,11 @@ class Vm(ConfigNode):
         the appropriate process isn't listening (RHEL6: acpid / RHEL7: systemd),
         the guest will gleefully ignore the request.
         """
-        if not self.parent.parent.confirm_app_is_published():
+        if not rootNode.get_child('apps').confirm_app_is_published():
             return
         if not self.confirm_vm_is_state('STOPPED'):
             return
-        self.parent.parent.extend_autostop(minutes=cfg.defaultAppExtendTime)
+        rootNode.get_child('apps').extend_autostop(minutes=cfg.defaultAppExtendTime)
         try:
             rClient.start_vm(self.appId, self.vmId)
         except:
@@ -2625,7 +2449,7 @@ class Vm(ConfigNode):
         app was originally created), you must first ensure the VM never shuts
         down ... or make sure you run this command before any shutdown.
         """
-        if not self.parent.parent.confirm_app_is_published():
+        if not rootNode.get_child('apps').confirm_app_is_published():
             return
         try:
             rClient.redeploy_vm(self.appId, self.vmId)
@@ -2645,7 +2469,7 @@ class Vm(ConfigNode):
         the appropriate process isn't listening (RHEL6: acpid / RHEL7: systemd),
         the guest will gleefully ignore the request.
         """
-        if not self.parent.parent.confirm_app_is_published():
+        if not rootNode.get_child('apps').confirm_app_is_published():
             return
         if not self.confirm_vm_is_state('STARTED'):
             return
@@ -2665,7 +2489,7 @@ class Vm(ConfigNode):
         In particularl, Ravello has a bug where VMs in 'STOPPING' state don't
         respond to this.
         """
-        if not self.parent.parent.confirm_app_is_published():
+        if not rootNode.get_child('apps').confirm_app_is_published():
             return
         #~ if not self.confirm_vm_is_state('STARTED'):
             #~ return
@@ -2686,7 +2510,7 @@ class Vm(ConfigNode):
         the appropriate process isn't listening (RHEL6: acpid / RHEL7: systemd),
         the guest will gleefully ignore the request.
         """
-        if not self.parent.parent.confirm_app_is_published():
+        if not rootNode.get_child('apps').confirm_app_is_published():
             return
         if not self.confirm_vm_is_state('STARTED'):
             return
@@ -2706,7 +2530,7 @@ class Vm(ConfigNode):
         Ravello/Amazon/Google problem). They can't always be fixed by using a
         repair call.
         """
-        if not self.parent.parent.confirm_app_is_published():
+        if not rootNode.get_child('apps').confirm_app_is_published():
             return
         try:
             rClient.repair_vm(self.appId, self.vmId)
@@ -2764,7 +2588,7 @@ class Shares(ConfigNode):
     
     def _new_share_helper(self, shareType, resource, email):
         if shareType == 'blueprint':
-            data = rCache.get_bps()
+            data = rCache.get_bps(myOrgOnly=True)
             req = {'sharedResourceType': 'BLUEPRINT'}
         elif shareType == 'VM image':
             data = rClient.get_images()
@@ -2824,7 +2648,7 @@ class Shares(ConfigNode):
                            if a.startswith(text)]
         elif current_param == 'blueprint':
             allowedBlueprints = ['@prompt']
-            for bp in rCache.get_bps():
+            for bp in rCache.get_bps(myOrgOnly=True):
                 allowedBlueprints.append(bp['name'])
             completions = [a for a in allowedBlueprints
                            if a.startswith(text)]
