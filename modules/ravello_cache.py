@@ -44,7 +44,7 @@ class RavelloCache(object):
         else:
             return None
     
-    def get_bps(self):
+    def get_bps(self, myOrgOnly=False):
         try:
             ts = self._bpCache_tstamp
         except:
@@ -52,7 +52,10 @@ class RavelloCache(object):
         else:
             if ui.get_timestamp_proximity(ts) < -120:
                 self.update_bp_cache()
-        return self.bpCache.values()
+        if myOrgOnly:
+            return [bp for bp in self.bpCache.values() if self.get_user(bp['ownerDetails']['userId'])]
+        else:
+            return self.bpCache.values()
     
     def update_app_cache(self, appId=None):
         if appId:
