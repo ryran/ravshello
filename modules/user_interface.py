@@ -184,7 +184,7 @@ class RavelloRoot(ConfigNode):
             Monitoring(self)
             Events(self)
             # Images(self)
-            Shares(self)
+            Shared(self)
             Keypairs(self)
         Applications(self)
     
@@ -2542,27 +2542,59 @@ class Vm(ConfigNode):
         rCache.purge_app_cache(self.appId)
 
 
-class Shares(ConfigNode):
-    """Setup the 'shares' node.
+class Shared(ConfigNode):
+    """Setup the 'shared' node.
     
-    Path: /shares/
+    Path: /shared/
     """
     
     def __init__(self, parent):
-        ConfigNode.__init__(self, 'shares', parent)
+        ConfigNode.__init__(self, 'shared', parent)
         self.isPopulated = False
+        self.numberOfShares = 0
+        self.nodeFromUser = {}
+        self.nodeToTarget = {}
     
     def summary(self):
         if self.isPopulated:
-            return ("{} shares".format(self.numberOfShares), None)
+            return ("{} sum total resources shared by everyone".format(self.numberOfShares), True)
         else:
             return ("To populate, run: refresh", False)
+    
+    def _integrate_share_into_node_structure(self, share):
+        s = share
+        self.numberOfShares += 1
+        uid = int(s['sharingUserId'])
+        child = self.nodeFromUser.get(uid)
+        # Create child node if it doesn't exist
+        if not child:
+            child = self.nodeFromUser[uid] = SharedFromUser(uid, self)
+        # Convert the targetEmail/communityId to a string
+        if s.has_key('targetEmail'):
+            target = s['targetEmail']
+        elif s.has_key('targetCommunityId'):
+            try:
+                community = rClient.get_community(s['targetCommunityId'])
+                target = community['name']
+            except:
+                target = "{}".format(s['targetCommunityId'])
+        else:
+            target = "NULL"
+        if not self.nodeToTarget.get(uid):
+            self.nodeToTarget[uid] = {}
+        grandchild = self.nodeToTarget[uid].get(target)
+        if not grandchild:
+            grandchild = self.nodeToTarget[uid][target] = SharedToTarget(target, child)
+        Share(s, grandchild)
     
     def refresh(self):
         self._children = set([])
         self.numberOfShares = 0
-        for share in rCache.get_shares():
-            Share("{}".format(share['id']), self)
+        self.nodeFromUser = {}
+        self.nodeToTarget = {}
+        rCache.update_share_cache()
+        for s in rCache.get_shares():
+            self._integrate_share_into_node_structure(s)
         self.isPopulated = True
     
     def ui_command_refresh(self):
@@ -2571,7 +2603,7 @@ class Shares(ConfigNode):
         
         Not doing this automatically speeds startup time.
         """
-        print(c.yellow("\nRefreshing all shares data . . . "), end='')
+        print(c.yellow("\nRefreshing all shared-resources data . . . "), end='')
         stdout.flush()
         self.refresh()
         print(c.green("DONE!\n"))
@@ -2582,10 +2614,8 @@ class Shares(ConfigNode):
         except:
             print(c.red("\nProblem creating shared resource!\n"))
             raise
-        print(c.green("\nShare created with share ID {}!".format(newShare['id'])))
-        rCache.update_share_cache()
-        Share("{}".format(newShare['id']), self)
-        print()
+        print(c.green("\nShare created with share ID {}!\n".format(newShare['id'])))
+        self._integrate_share_into_node_structure(newShare)
     
     def _new_share_helper(self, shareType, resource, email):
         if shareType == 'blueprint':
@@ -2715,22 +2745,65 @@ class Shares(ConfigNode):
             return completions
 
 
+class SharedFromUser(ConfigNode):
+    """Setup the shared-from node.
+    
+    Path: /shared/BY_{USER_EMAIL}
+    """
+    
+    def __init__(self, uid, parent):
+        try:
+            self.email = rCache.get_user(uid)['email']
+            name = c.replace_bad_chars_with_underscores(self.email)
+        except:
+            self.email = "UNKNOWN UID {}".format(uid)
+            name = "UID_{}".format(uid)
+        self.name = "BY_{}".format(name)
+        ConfigNode.__init__(self, self.name, parent)
+        self.numberOfShares = self.numberOfTargets = 0
+    
+    def summary(self):
+        targets = " to {} target".format(self.numberOfTargets)
+        if not self.numberOfTargets:
+            targets = ""
+        elif self.numberOfTargets > 1:
+            targets += "s"
+        return ("{} resources shared by {}{}".format(self.numberOfShares, self.email, targets), True)
+
+
+class SharedToTarget(ConfigNode):
+    """Setup the shared-to node.
+    
+    Path: /shared/BY_{USER_EMAIL}/TO_{TARGET}/
+    """
+    
+    def __init__(self, target, parent):
+        self.target = target
+        self.name = "TO_{}".format(c.replace_bad_chars_with_underscores(target))
+        ConfigNode.__init__(self, self.name, parent)
+        self.numberOfShares = 0
+        parent.numberOfTargets += 1
+    
+    def summary(self):
+        return ("{} shared to {}".format(self.numberOfShares, self.target), True)
+
+
 class Share(ConfigNode):
     """Setup the dynamically-named share node.
     
-    Path: /shares/{ID}/
+    Path: /shared/BY_{USER_EMAIL}/TO_{TARGET}/{NAME}
     """
     
-    def __init__(self, shareId, parent):
-        ConfigNode.__init__(self, shareId, parent)
+    def __init__(self, share, parent):
+        s = share
+        self.shareId = s['id']
         parent.numberOfShares += 1
-        self.shareId = shareId
+        parent.parent.numberOfShares += 1
         resourceTypeShortener = {
             'BLUEPRINT': 'BP',
             'LIBRARY_VM': 'VM',
             'DISK_IMAGE': 'DISK',
             }
-        s = rCache.get_share(shareId)
         # Shorten the resourceType
         self.resourceType = resourceTypeShortener[s['sharedResourceType']]
         # Translate resource ID into a name
@@ -2742,34 +2815,18 @@ class Share(ConfigNode):
         elif self.resourceType in 'DISK':
             j = rClient.get_diskimage(resId)
         if j and j.has_key('name'):
-            self.resource = "\"{}\"".format(j['name'])
+            self.resource = '"{}"'.format(j['name'])
+            self.name = c.replace_bad_chars_with_underscores(j['name'])
         else:
             self.resource = "ID {}".format(resId)
-        # Convert sharingUserId to username
-        u = rCache.get_user(int(s['sharingUserId']))
-        if u:
-            self.user = u['username']
-        else:
-            self.user = "UID {}".format(s['sharingUserId'])
-        # Convert the targetEmail/communityId to a string
-        if s.has_key('targetEmail'):
-            self.target = s['targetEmail']
-        elif s.has_key('targetCommunityId'):
-            try:
-                community = rClient.get_community(s['targetCommunityId'])
-                self.target = "community \"{}\" ({})".format(community['name'], community['type'])
-            except:
-                self.target = "community {}".format(s['targetCommunityId'])
-        else:
-            self.target = "(NULL)"
+            self.name = c.replace_bad_chars_with_underscores(self.resource)
+        ConfigNode.__init__(self, self.name, parent)
         # Convert timestamp to date
         self.date = ui.convert_ts_to_date(s['time'], showHours=False)
         # Compose it all together
-        self.status = "{resourceType} {resource}; {user} -> {target} on {date}".format(
+        self.status = "{resourceType} {resource} on {date}".format(
             resourceType=self.resourceType,
             resource=self.resource,
-            user=self.user,
-            target=self.target,
             date=self.date)
 
     def summary(self):
@@ -2777,7 +2834,7 @@ class Share(ConfigNode):
     
     def ui_command_print_def(self, outputFile='@EDITOR'):
         """
-        Pretty-print JSON definition of share.
+        Pretty-print JSON definition of shared resource.
         
         Optionally specify *outputFile* as @term or @pager or as a relative /
         absolute path on the local system (tab-completion available). Default
@@ -2787,8 +2844,8 @@ class Share(ConfigNode):
         """
         print()
         outputFile = self.ui_eval_param(outputFile, 'string', '@EDITOR')
-        description = "share definition for {} {} (/shares/{})".format(
-            self.resourceType, self.resource, self.shareId)
+        description = "share definition for {} {} (/shared/{}/{}/{})".format(
+            self.resourceType, self.resource, self.parent.parent.name, self.parent.name, self.name)
         ui.print_obj(rCache.get_share(self.shareId), description, outputFile,
             tmpPrefix='share={}_{}'.format(self.resourceType, self.shareId))
         
@@ -2801,10 +2858,20 @@ class Share(ConfigNode):
         except:
             print(c.red("Problem deleting share!\n"))
             raise
-        rCache.purge_share_cache(self.shareId)
-        self.parent.numberOfShares -= 1
         print(c.green("Deleted share {}\n".format(self.shareId)))
-        self.parent.remove_child(self)
+        rCache.purge_share_cache(self.shareId)
+        self.parent.parent.parent.numberOfShares -= 1
+        self.parent.parent.numberOfShares -= 1
+        self.parent.numberOfShares -= 1
+        if not self.parent.parent.numberOfShares:
+            # If the sharing user has no more shares, remove everything
+            rootNode.get_child('shared').remove_child(self.parent.parent)
+        elif not self.parent.numberOfShares:
+            # Or if theere are no more resources shared TO the same target, remove that
+            self.parent.parent.remove_child(self.parent)
+        else:
+            # Otherwise, just remove ourself
+            self.parent.remove_child(self)
     
     def ui_command_delete(self, noconfirm='false'):
         """
