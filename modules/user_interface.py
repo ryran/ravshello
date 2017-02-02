@@ -131,6 +131,7 @@ def main():
             print(c.yellow("Ignoring script file because cmdline args present\n"))
         for cmd in rOpt.cmdlineArgs:
             shell.run_cmdline(cmd)
+        shell.run_interactive(exit_on_error=rOpt.enableDebugging)
     elif is_admin() and rOpt.scriptFile:
         # Run script file non-interactively
         try:
