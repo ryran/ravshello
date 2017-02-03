@@ -33,3 +33,14 @@ eventsOfInterest:
     - VM_STARTED
     - VM_SNAPSHOTTING_AFTER_STOP
     - VM_FINISHED_SNAPSHOTTING
+
+
+## If present, each cmdline in *preRunCommands* will be executed prior to
+## any cmds present on argv and prior to entering the interactive shell but
+## ONLY in admin mode and when no -s SCRIPTFILE option is present.
+
+#preRunCommands:
+#    - /blueprints refresh
+#    - cd /apps
+#    - ls
+#    - (ADD AS MANY COMMANDS AS YOU WANT)
