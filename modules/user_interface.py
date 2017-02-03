@@ -125,7 +125,7 @@ def main():
     c.verbose("Done!\n")
     # For some reason sleep is necessary here to fix issue #49
     sleep(0.1)
-    if is_admin() and rOpt.cfgFile.get('preRunCommands'):
+    if is_admin() and rOpt.cfgFile.get('preRunCommands') and not rOpt.scriptFile:
         for cmd in rOpt.cfgFile['preRunCommands']:
             shell.run_cmdline(cmd)
     if is_admin() and rOpt.cmdlineArgs:
