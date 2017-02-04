@@ -1,26 +1,54 @@
+######
 ## Optionally specify login credentials for Ravello account to avoid prompting
 
 #ravelloUser: me@example.com
 #ravelloPass: my cr@zy passw0rd, no quotes required
 
 
+######
 ## If present, *nickname* will be used as the ravshello 'user', overriding the
 ## default behavior of determining this from the system user (note that this
-## nickname directive can in turn be overriden by the cmdline --nickname opt)
+## nickname directive can in turn be overriden by the cmdline --nickname opt).
 
 #nickname: myNickName
 
 
-## Optionally specify additional text to be displayed when login fails
+######
+## Optionally declare MULTIPLE sets of Ravello credentials and map them to
+## profile names. The names are arbitrary and can be selected by use of
+## the -u or --user cmdline option. Notes:
+##  - *ravelloUser* is required.
+##  - *ravelloPass* is not required. (Will be prompted for pass.)
+##  - *nickname* is not required.
+##  - *defaultProfile* is not required.
+
+#userProfiles:
+#    bob:
+#        ravelloUser: bob@example.com
+#        ravelloPass: xxxxx
+#    ana:
+#        ravelloUser: anabanana@example.com
+#        ravelloPass: xxxxx
+#        nickname: ana
+#    wow@example:
+#        ravelloUser: wow@example.com
+#    defaultProfile: ana
+
+
+######
+## Optionally specify additional text to be displayed when login fails.
 
 #unableToLoginAdditionalMsg: Ohmg contact bob at the helpdesk!
 
+
+######
 ## If present, *sshKeyFile* is integrated into the ssh command reported to the
-## user by ravshello's query_app_status command
+## user by ravshello's query_app_status command.
 
 #sshKeyFile: /expected/path/to/ssh/priv/key
 
 
+######
 ## If present, *eventsOfInterest* overrides rav-notify's default list of
 ## events to watch for. Remove existing lines and/or add new ones.
 
@@ -35,6 +63,7 @@ eventsOfInterest:
     - VM_FINISHED_SNAPSHOTTING
 
 
+######
 ## If present, each cmdline in *preRunCommands* will be executed prior to
 ## any cmds present on argv and prior to entering the interactive shell but
 ## ONLY in admin mode and when no -s SCRIPTFILE option is present.

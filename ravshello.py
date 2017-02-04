@@ -57,8 +57,9 @@ def main():
         help="Show this help message and exit")
     grpU.add_argument(
         '-u',  dest='ravelloUser', metavar='USER', default='',
-        help=("Explicitly specify Ravello username (will automatically prompt "
-              "for a passphrase)"))
+        help=("Explicitly specify Ravello username or profile name from {} "
+              "config file (will automatically prompt for passphrase if none "
+              "is present in cfgfile)".format(cfg.defaultUserCfgFile)))
     grpU.add_argument(
         '-p', dest='ravelloPass', metavar='PASSWD', default='',
         help=("Explicitly specify a Ravello user password on the command-line "
@@ -150,9 +151,7 @@ def main():
     else:
         rOpt.cfgFile['sshKeyFile'] = None
     
-    print(c.BOLD(
-        "Welcome to {}, "
-        "a shell to provision & manage machines with Ravello!".format(cfg.prog)))
+    print(c.BOLD("Welcome to {}!".format(cfg.prog)))
     
     # Liftoff
     # 1.) Establish a local user name to use in ravshello

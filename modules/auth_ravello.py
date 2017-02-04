@@ -51,20 +51,41 @@ def login():
     cfgUser = rOpt.cfgFile.get('ravelloUser', None)
     cfgPass = rOpt.cfgFile.get('ravelloPass', None)
     cfgMesg = rOpt.cfgFile.get('unableToLoginAdditionalMsg', None)
+    profiles = rOpt.cfgFile.get('userProfiles', {})
+    user = passwd = userFrom = profile = None
     # If necessary, get Ravello *username* from configfile or prompt
-    if not rOpt.ravelloUser:
+    try:
+        profile = profiles[rOpt.ravelloUser]
+        user = profile['ravelloUser']
+        passwd = profile.get('ravelloPass')
+        userFrom = 'profile'
+    except:
+        user = rOpt.ravelloUser
+    if not user:
         if cfgUser:
-            rOpt.ravelloUser = cfgUser
+            user = cfgUser
+            userFrom = 'cfg'
         else:
-            rOpt.ravelloUser = get_username(
-                c.CYAN("  Enter Ravello username: "))
+            try:
+                user = profiles[profiles['defaultProfile']]['ravelloUser']
+            except:
+                user = get_username(c.CYAN("  Enter Ravello username: "))
     # If necessary, get Ravello *password* from configfile or prompt
-    if not rOpt.ravelloPass:
-        if cfgPass:
-            rOpt.ravelloPass = cfgPass
-        else:
-            rOpt.ravelloPass = get_passphrase(
-                c.CYAN("  Enter Ravello passphrase: "))
+    if rOpt.ravelloPass:
+        passwd = rOpt.ravelloPass
+    elif userFrom == 'profile':
+        pass
+    elif userFrom == 'cfg':
+        passwd = cfgPass
+    else:
+        try:
+            passwd = profiles[profiles['defaultProfile']]['ravelloPass']
+        except:
+            pass
+    if not passwd:
+        passwd = get_passphrase(c.CYAN("  Enter Ravello passphrase: "))
+    rOpt.ravelloUser = user
+    rOpt.ravelloPass = passwd
     try:
         rClient.login(rOpt.ravelloUser, rOpt.ravelloPass)
     except:
