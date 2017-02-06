@@ -1254,7 +1254,11 @@ class Bp(ConfigNode):
         """
         print()
         outputFile = self.ui_eval_param(outputFile, 'string', '@EDITOR')
-        description = "BP definition for /blueprints/{}".format(self.bpName)
+        if self.parent == rootNode.get_child('blueprints'):
+            bpPath = "/blueprints/{}".format(self.bpName)
+        else:
+            bpPath = "/blueprints/Shared_with_me/{}".format(self.bpName)
+        description = "BP definition for {}".format(bpPath)
         ui.print_obj(rClient.get_blueprint(self.bpId), description, outputFile,
             tmpPrefix='bp={}'.format(self.bpName))
     
@@ -1929,7 +1933,10 @@ class App(ConfigNode):
                         try:
                             ip_Elastic = nic['ipConfig']['elasticIpAddress']
                         except:
-                            ip_Public = nic['ipConfig']['publicIp']
+                            try:
+                                ip_Public = nic['ipConfig']['publicIp']
+                            except:
+                                pass
                     elif nic['ipConfig'].has_key('publicIp'):
                         ip_Forwarder = nic['ipConfig']['publicIp']
                     # Check for services
@@ -1940,7 +1947,7 @@ class App(ConfigNode):
                                     svc=svc['name'], exPort=svc['externalPort'], proto=svc['protocol'], inPort=svc['portRange'])
                                 if svc['name'] == 'ssh' and not vm['ssh']['fqdn']:
                                     vm['ssh']['fqdn'] = fqdn
-                                    if svc['externalPort'] != 22:
+                                    if svc['externalPort'] != "22":
                                         vm['ssh']['port'] = " -p {}".format(svc['externalPort'])
                                 services.append(s)
                     # Finally, print:
