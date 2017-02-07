@@ -95,7 +95,10 @@ def main():
     global rOpt, user, appnamePrefix, rClient, rCache, rootNode
     rOpt = cfg.opts
     user = cfg.user
-    appnamePrefix = 'k:{}__'.format(user)
+    if user:
+        appnamePrefix = 'k:{}__'.format(user)
+    else:
+        appnamePrefix = ''
     rClient = cfg.rClient
     rCache = cfg.rCache
     # Clear preferences if asked via cmdline arg
@@ -2384,6 +2387,9 @@ class Vm(ConfigNode):
         else:
             return False
     
+    def confirm_app_is_published(self):
+        return self.parent.parent.confirm_app_is_published()
+        
     def ui_command_print_def(self, outputFile='@EDITOR', aspect='@auto'):
         """
         Pretty-print JSON defininition of VM.
@@ -2400,7 +2406,7 @@ class Vm(ConfigNode):
         print()
         outputFile = self.ui_eval_param(outputFile, 'string', '@EDITOR')
         aspect = self.ui_eval_param(aspect, 'string', '@auto')
-        if aspect == 'deployment' and not rootNode.get_child('apps').confirm_app_is_published():
+        if aspect == 'deployment' and not self.confirm_app_is_published():
             return
         if aspect == '@auto':
             if rClient.is_application_published(self.appId)['value']:
@@ -2436,11 +2442,11 @@ class Vm(ConfigNode):
         the appropriate process isn't listening (RHEL6: acpid / RHEL7: systemd),
         the guest will gleefully ignore the request.
         """
-        if not rootNode.get_child('apps').confirm_app_is_published():
+        if not self.confirm_app_is_published():
             return
         if not self.confirm_vm_is_state('STOPPED'):
             return
-        rootNode.get_child('apps').extend_autostop(minutes=cfg.defaultAppExtendTime)
+        self.parent.parent.extend_autostop(minutes=cfg.defaultAppExtendTime)
         try:
             rClient.start_vm(self.appId, self.vmId)
         except:
@@ -2461,7 +2467,7 @@ class Vm(ConfigNode):
         app was originally created), you must first ensure the VM never shuts
         down ... or make sure you run this command before any shutdown.
         """
-        if not rootNode.get_child('apps').confirm_app_is_published():
+        if not self.confirm_app_is_published():
             return
         try:
             rClient.redeploy_vm(self.appId, self.vmId)
@@ -2481,7 +2487,7 @@ class Vm(ConfigNode):
         the appropriate process isn't listening (RHEL6: acpid / RHEL7: systemd),
         the guest will gleefully ignore the request.
         """
-        if not rootNode.get_child('apps').confirm_app_is_published():
+        if not self.confirm_app_is_published():
             return
         if not self.confirm_vm_is_state('STARTED'):
             return
@@ -2501,7 +2507,7 @@ class Vm(ConfigNode):
         In particularl, Ravello has a bug where VMs in 'STOPPING' state don't
         respond to this.
         """
-        if not rootNode.get_child('apps').confirm_app_is_published():
+        if not self.confirm_app_is_published():
             return
         #~ if not self.confirm_vm_is_state('STARTED'):
             #~ return
@@ -2522,7 +2528,7 @@ class Vm(ConfigNode):
         the appropriate process isn't listening (RHEL6: acpid / RHEL7: systemd),
         the guest will gleefully ignore the request.
         """
-        if not rootNode.get_child('apps').confirm_app_is_published():
+        if not self.confirm_app_is_published():
             return
         if not self.confirm_vm_is_state('STARTED'):
             return
@@ -2542,7 +2548,7 @@ class Vm(ConfigNode):
         Ravello/Amazon/Google problem). They can't always be fixed by using a
         repair call.
         """
-        if not rootNode.get_child('apps').confirm_app_is_published():
+        if not self.confirm_app_is_published():
             return
         try:
             rClient.repair_vm(self.appId, self.vmId)
