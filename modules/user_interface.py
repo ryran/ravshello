@@ -2011,11 +2011,11 @@ class App(ConfigNode):
             return
         if not is_admin():
             if minutes > cfg.maxLearnerExtendTime:
-                print(c.red("Using maximum learner auto-stop time of {} minutes"
+                print(c.red("\nUsing maximum learner auto-stop time of {} minutes"
                             .format(cfg.maxLearnerExtendTime)))
                 minutes = cfg.maxLearnerExtendTime
             elif minutes < 0:
-                print(c.RED("Invalid learner auto-stop time\n"))
+                print(c.RED("\nInvalid learner auto-stop time\n"))
                 return
         self.extend_autostop(minutes)
         print()
