@@ -7,7 +7,7 @@ from __future__ import print_function
 from sys import stdout, stdin
 from pydoc import pager, pipepager
 from time import sleep, time
-from stat import S_ISDIR, S_ISREG
+from stat import S_ISDIR
 from os import path, makedirs, chmod, remove, stat
 from glob import glob
 from datetime import datetime, date
@@ -17,6 +17,7 @@ import json
 import subprocess
 import termios
 import re
+from copy import deepcopy
 
 # Modules not from standard library, but widely available
 try:
@@ -53,30 +54,29 @@ def is_admin():
         return False
 
 
-def _complete_path(path, stat_fn):
-    """Return filenames to ui_complete_*() meths for path completion.
-    
-    Taken from targetcli's ui_backstore module.
-    """
+def _complete_path(pathspec):
+    """Return filenames to ui_complete_*() methods for path completion."""
     filtered = []
-    for entry in glob(path + '*'):
+    for entry in glob(path.expanduser(pathspec) + '*'):
         st = stat(entry)
+        if pathspec.startswith('~'):
+            if pathspec == '~':
+                entry = '~'
+            elif pathspec.startswith('~/'):
+                entry = entry.replace(path.expanduser('~'), '~')
+            else:
+                tildepath = pathspec.split('/')[0]
+                entry = entry.replace(path.expanduser(tildepath), tildepath)
         if S_ISDIR(st.st_mode):
             filtered.append(entry + '/')
-        elif stat_fn(st.st_mode):
+        else:
             filtered.append(entry)
     # Put directories at the end
-    return sorted(filtered,
-                  key=lambda s: '~'+s if s.endswith('/') else s)
-
-def _complete_print_obj(parameters, text, current_param, param_name='outputFile'):
-    """For ui_complete_*() meths that only support standard 'outputFile=' arg."""
-    if current_param != param_name:
-        return []
-    completions = _complete_path(text, S_ISREG)
+    completions = sorted(filtered, key=lambda i: '~'+i if i.endswith('/') else i)
     if len(completions) == 1 and not completions[0].endswith('/'):
         completions = [completions[0] + ' ']
     return completions
+
 
 def get_num_learner_active_vms(learner):
     """Return the number of active VMs a learner has."""
@@ -262,7 +262,10 @@ class Events(ConfigNode):
         ui.print_obj(rClient.get_events(), description, outputFile, tmpPrefix='events')
     
     def ui_complete_print_event_names(self, parameters, text, current_param):
-        return _complete_print_obj(parameters, text, current_param)
+        if current_param == 'outputFile':
+            return _complete_path(text)
+        else:
+            return []
     
     def ui_command_print_registered_alerts(self, outputFile='@EDITOR'):
         """
@@ -285,7 +288,10 @@ class Events(ConfigNode):
         ui.print_obj(rClient.get_alerts(), description, outputFile, tmpPrefix='alerts')
     
     def ui_complete_print_registered_alerts(self, parameters, text, current_param):
-        return _complete_print_obj(parameters, text, current_param)
+        if current_param == 'outputFile':
+            return _complete_path(text)
+        else:
+            return []
 
 
 class Event(ConfigNode):
@@ -569,14 +575,11 @@ class Billing(ConfigNode):
             raise
         description = "details of all charges incurred during month {}".format(when)
         ui.print_obj(billing, description, outputFile,
-            tmpPrefix='billing={}'.format(month_name[month][:3]))
+            tmpPrefix='billing_{}'.format(month_name[month][:3]))
     
     def _complete_file_month_year(self, parameters, text, current_param):
         if current_param == 'outputFile':
-            completions = _complete_path(text, S_ISREG)
-            if len(completions) == 1 and not completions[0].endswith('/'):
-                completions = [completions[0] + ' ']
-            return completions
+            return _complete_path(text)
         elif current_param == 'month':
             L = map(str, range(-12, 13))
             L.insert(0, '@prompt')
@@ -649,7 +652,7 @@ class Billing(ConfigNode):
         csv = self.gen_csv(b, sortBy)
         description = "CSV details of all charges incurred during month {}".format(when)
         ui.print_obj(billing, description, outputFile,
-            tmpPrefix='billing={}'.format(month_name[month][:3]), suffix='.csv')
+            tmpPrefix='billing_{}'.format(month_name[month][:3]), suffix='.csv')
     
     def ui_complete_export_month_to_csv(self, parameters, text, current_param):
         return self._complete_file_month_year_sortby(parameters, text, current_param)
@@ -681,14 +684,11 @@ class Billing(ConfigNode):
         txt = self.gen_txt_summary(billing, sortBy)
         description = "billing summary of charges incurred since the start of this month"
         ui.print_obj(txt, description, outputFile,
-            tmpPrefix='billing=thismonth', suffix='.txt')
+            tmpPrefix='billing_thismonth', suffix='.txt')
     
     def ui_complete_this_months_summary(self, parameters, text, current_param):
         if current_param == 'outputFile':
-            completions = _complete_path(text, S_ISREG)
-            if len(completions) == 1 and not completions[0].endswith('/'):
-                completions = [completions[0] + ' ']
-            return completions
+            return _complete_path(text)
         elif current_param == 'sortBy':
             completions = [a for a in ['nick', 'user']
                            if a.startswith(text)]
@@ -739,7 +739,7 @@ class Billing(ConfigNode):
         txt = self.gen_txt_summary(billing, sortBy)
         description = "billing summary of charges incurred during month {}".format(when)
         ui.print_obj(txt, description, outputFile,
-            tmpPrefix='billing={}'.format(month_name[month][:3]), suffix='.txt')
+            tmpPrefix='billing_{}'.format(month_name[month][:3]), suffix='.txt')
     
     def ui_complete_select_month_summary(self, parameters, text, current_param):
         return self._complete_file_month_year_sortby(parameters, text, current_param)
@@ -1000,10 +1000,13 @@ class User(ConfigNode):
         outputFile = self.ui_eval_param(outputFile, 'string', '@EDITOR')
         description = "user definition for /users/{}".format(self.user)
         ui.print_obj(rCache.get_user(self.userId), description, outputFile,
-            tmpPrefix='user={}'.format(self.user))
+            tmpPrefix='user_{}'.format(self.user))
     
     def ui_complete_print_def(self, parameters, text, current_param):
-        return _complete_print_obj(parameters, text, current_param)
+        if current_param == 'outputFile':
+            return _complete_path(text)
+        else:
+            return []
     
     def ui_command_update_info(self):
         """
@@ -1263,10 +1266,13 @@ class Bp(ConfigNode):
             bpPath = "/blueprints/Shared_with_me/{}".format(self.bpName)
         description = "BP definition for {}".format(bpPath)
         ui.print_obj(rClient.get_blueprint(self.bpId), description, outputFile,
-            tmpPrefix='bp={}'.format(self.bpName))
+            tmpPrefix='bp_{}'.format(self.bpName))
     
     def ui_complete_print_def(self, parameters, text, current_param):
-        return _complete_print_obj(parameters, text, current_param)
+        if current_param == 'outputFile':
+            return _complete_path(text)
+        else:
+            return []
     
     def ui_command_copy(self, name='@prompt', desc='@prompt'):
         """
@@ -1677,12 +1683,11 @@ class App(ConfigNode):
         print("To publish application, run command:")
         print(c.BOLD("    /apps/{}/ publish\n".format(self.appName)))
     
-    def confirm_app_is_published(self):
-        if rClient.is_application_published(self.appId)['value']:
-            return True
-        else:
+    def confirm_app_is_published(self, quiet=False):
+        published = rClient.is_application_published(self.appId)['value']
+        if not quiet:
             self.print_message_app_not_published()
-            return False
+        return published
     
     def ui_command_update_note(self, note='@prompt'):
         """
@@ -2050,7 +2055,7 @@ class App(ConfigNode):
         if aspect == 'deployment' and not self.confirm_app_is_published():
             return
         if aspect == '@auto':
-            if rClient.is_application_published(self.appId)['value']:
+            if self.confirm_app_is_published(quiet=True):
                 aspect = 'deployment'
             else:
                 aspect = 'design'
@@ -2060,9 +2065,7 @@ class App(ConfigNode):
 
     def ui_complete_print_def(self, parameters, text, current_param):
         if current_param == 'outputFile':
-            completions = _complete_path(text, S_ISREG)
-            if len(completions) == 1 and not completions[0].endswith('/'):
-                completions = [completions[0] + ' ']
+            return _complete_path(text)
         elif current_param == 'aspect':
             L = ['@auto', 'deployment', 'design', 'properties']
             completions = [a for a in L
@@ -2074,16 +2077,12 @@ class App(ConfigNode):
         return completions
     
     def delete_app(self):
-        if rCache.get_app(self.appId)['published']:
-            published = True
-        else:
-            published = False
         try:
             rClient.delete_application(self.appId)
         except:
             print(c.red("Problem deleting app!\n"))
             raise
-        if published:
+        if self.confirm_app_is_published(quiet=True):
             self.parent.numberOfPublishedApps -= 1
         rCache.purge_app_cache(self.appId)
         self.parent.numberOfApps -= 1
@@ -2120,6 +2119,21 @@ class App(ConfigNode):
         else:
             return completions
     
+    def publish_design_updates(self):
+        try:
+            rClient.publish_application_updates(self.appId)
+        except:
+            print(c.red("\nProblem publishing application design updates to cloud!\n"))
+            raise
+        print(c.green("\nPublished application design updates to cloud\n"))
+
+    def ui_command_publish_design_updates(self):
+        """
+        Update the cloud with the latest design updates.
+        """
+        if self.confirm_app_is_published():
+            self.publish_design_updates()
+    
     def ui_command_publish(self, region='@prompt', startAllVms='true'):
         """
         Interactively publish an application to the cloud.
@@ -2130,7 +2144,7 @@ class App(ConfigNode):
         region = self.ui_eval_param(region, 'string', '@prompt')
         startAllVms = self.ui_eval_param(startAllVms, 'bool', True)
         # Sanity check
-        if rCache.get_app(self.appId)['published'] is True:
+        if self.confirm_app_is_published(quiet=True):
             print(c.red("\nApplication already published!\n"))
             return
         # Set defaults
@@ -2359,6 +2373,16 @@ class Vm(ConfigNode):
         self.appName = parent.appName
         self.vmId = vmId
         self.vmName = name
+        self.validNicDeviceTypes = [
+            'e1000',
+            'virtio',
+            'vmxnet3',
+            'pcnet',
+            'rtl8139',
+            'ne2k_pci',
+            'vmxnet',
+            'e1000e',
+            ]
     
     def summary(self):
         app = rCache.get_app(self.appId)
@@ -2387,8 +2411,8 @@ class Vm(ConfigNode):
         else:
             return False
     
-    def confirm_app_is_published(self):
-        return self.parent.parent.confirm_app_is_published()
+    def confirm_app_is_published(self, quiet=False):
+        return self.parent.parent.confirm_app_is_published(quiet)
         
     def ui_command_print_def(self, outputFile='@EDITOR', aspect='@auto'):
         """
@@ -2409,20 +2433,18 @@ class Vm(ConfigNode):
         if aspect == 'deployment' and not self.confirm_app_is_published():
             return
         if aspect == '@auto':
-            if rClient.is_application_published(self.appId)['value']:
+            if self.confirm_app_is_published(quiet=True):
                 aspect = 'deployment'
             else:
                 aspect = 'design'
         description = "VM {} definition for /apps/{}/vms/{}".format(aspect, self.appName, self.vmName)
         obj = rClient.get_vm(self.appId, self.vmId, aspect=aspect)
         ui.print_obj(obj, description, outputFile,
-            tmpPrefix='vm={}_{}'.format(self.appName, self.vmName))
+            tmpPrefix='vm_{}_{}'.format(self.appName, self.vmName))
     
     def ui_complete_print_def(self, parameters, text, current_param):
         if current_param == 'outputFile':
-            completions = _complete_path(text, S_ISREG)
-            if len(completions) == 1 and not completions[0].endswith('/'):
-                completions = [completions[0] + ' ']
+            return _complete_path(text)
         elif current_param == 'aspect':
             L = ['@auto', 'deployment', 'design']
             completions = [a for a in L
@@ -2539,7 +2561,7 @@ class Vm(ConfigNode):
             raise
         print(c.yellow("\nVM now restarting\n"))
         rCache.purge_app_cache(self.appId)
-
+    
     def ui_command_repair(self):
         """
         Repair a VM that has entered an ERROR state.
@@ -2557,6 +2579,532 @@ class Vm(ConfigNode):
             raise
         print(c.yellow("\nAPI 'repair' call was sent; check VM status\n"))
         rCache.purge_app_cache(self.appId)
+    
+    def ui_command_nic_edit(self, index='@prompt', name='@current', mac='@current',
+            deviceType='@current', bootProto='@current', ip='@current', mask='@current',
+            gateway='@current', dns='@current', externalAccessState='@current',
+            publishUpdates='true'):
+        """
+        Edit an existing NIC in the VM design.
+        
+        All params (except *index*) allow a value of '@current' to make no change.
+        
+        *index* should be the index number of the existing NIC to edit
+            (e.g., '0', '1')
+        If specified, *mac* should be a valid hexadecimal MAC address with
+            6 colon-separated octets
+        If specified, *deviceType* should be one of:
+            e1000
+            virtio
+            vmxnet3
+            pcnet
+            rtl8139
+            ne2k_pci
+            vmxnet
+            e1000e
+        If specified, *bootProto* should be either 'static' or 'dhcp'
+        If specified, *ip* should be a valid decimal IP address with
+            4 dot-separated octets
+        When using bootProto=static, *gateway* and *dns* are optional and thus
+            allow an an additional value of '@clear'; otherwise they should be
+            valid decimal IP addresses with 4 dot-separated octets
+        If specified, *externalAccessState* should be one of:
+            CONDITIONAL_PUBLIC_IP
+            ALWAYS_PUBLIC_IP
+            ALWAYS_PORT_FORWARDING
+        
+        If application is already published, and *publishUpdates* is 'true'
+        (default), the design changes will be immediately published to the
+        cloud.
+        
+        Feel free to file RFEs for extra things that haven't been implemented.
+        """
+        index = self.ui_eval_param(index, 'string', '@prompt')
+        name = self.ui_eval_param(name, 'string', '@current')
+        mac = self.ui_eval_param(mac, 'string', '@current')
+        deviceType = self.ui_eval_param(deviceType, 'string', '@current')
+        bootProto = self.ui_eval_param(bootProto, 'string', '@current')
+        ip = self.ui_eval_param(ip, 'string', '@current')
+        mask = self.ui_eval_param(mask, 'string', '@current')
+        gateway = self.ui_eval_param(gateway, 'string', '@current')
+        dns = self.ui_eval_param(dns, 'string', '@current')
+        externalAccessState = self.ui_eval_param(externalAccessState, 'string', '@current')
+        publishUpdates = self.ui_eval_param(publishUpdates, 'bool', True)
+        print()
+        vm = rCache.get_vm(self.appId, self.vmId, aspect='design')
+        if not vm.get('networkConnections'):
+            print(c.red("This VM has no NICs!\n"))
+            return
+        nics = sorted(vm['networkConnections'], key=lambda nic: nic['device']['index'])
+        # index
+        if index == '@prompt':
+            indices = []
+            for n in nics:
+                indices.append(n['name'])
+            print(c.BOLD("Existing NICs on VM '{}':".format(self.vmName)))
+            for i, name in enumerate(indices):
+                print("  {})  {}".format(c.cyan(i), name))
+            index = ui.prompt_for_number(c.CYAN("\nEnter number of nic: "), endRange=i)
+        else:
+            try:
+                index = int(index)
+            except:
+                print(c.red("index must be a number!\n"))
+                return
+        try:
+            nic = deepcopy(nics[index])
+        except:
+            print(c.red("Invalid nic number specified!\n"))
+            return
+        # name
+        if name != '@current':
+            nic['name'] = name
+        # mac
+        if mac != '@current':
+            if not ui.validate_mac_addr(mac):
+                print(c.red("Invalid MAC address format for mac!\n"))
+                return
+            nic['device']['useAutomaticMac'] = False
+            nic['device']['mac'] = mac
+        # deviceType
+        if deviceType != '@current':
+            if deviceType not in self.validNicDeviceTypes:
+                print(c.red("Invalid deviceType! Must be one of: {}\n".format(", ".join(self.validNicDeviceTypes))))
+                return
+            nic['device']['deviceType'] = deviceType
+        # bootProto
+        if bootProto == '@current':
+            if nic['ipConfig'].get('staticIpConfig'):
+                bootProto = 'static'
+            else:
+                bootProto = 'dhcp'
+        elif bootProto == 'static':
+            try:
+                del nic['ipConfig']['autoIpConfig']
+                nic['ipConfig']['staticIpConfig'] = {}
+            except:
+                pass
+        elif bootProto == 'dhcp':
+            try:
+                del nic['ipConfig']['staticIpConfig']
+                nic['ipConfig']['autoIpConfig'] = {}
+            except:
+                pass
+        # ip
+        if ip == '@current':
+            if bootProto == 'static':
+                try:
+                    nic['ipConfig']['staticIpConfig']['ip']
+                except:
+                    print(c.red("Must specify ip!\n"))
+                    return
+        elif bootProto == 'static':
+            if not ui.validate_ipv4_addr(ip):
+                print(c.red("Invalid IP format for ip!\n"))
+                return
+            nic['ipConfig']['staticIpConfig']['ip'] = ip
+        else:
+            print(c.red("Cannot specify ip when using bootProto=dhcp!\n"))
+            return
+        # mask
+        if mask == '@current':
+            if bootProto == 'static':
+                try:
+                    nic['ipConfig']['staticIpConfig']['mask']
+                except:
+                    print(c.red("Must specify mask!\n"))
+                    return
+        elif bootProto == 'static':
+            if not ui.validate_ipv4_addr(mask):
+                print(c.red("Invalid IP format for mask!\n"))
+                return
+            nic['ipConfig']['staticIpConfig']['mask'] = mask
+        else:
+            print(c.red("Cannot specify mask when using bootProto=dhcp!\n"))
+            return
+        # gateway
+        if gateway == '@current':
+            pass
+        elif bootProto == 'static':
+            if gateway == '@clear':
+                try:
+                    del nic['ipConfig']['staticIpConfig']['gateway']
+                except:
+                    pass
+            else:
+                if not ui.validate_ipv4_addr(gateway):
+                    print(c.red("Invalid IP format for gateway!\n"))
+                    return
+                nic['ipConfig']['staticIpConfig']['gateway'] = gateway
+        else:
+            print(c.red("Cannot specify gateway when using bootProto=dhcp!\n"))
+            return
+        # dns
+        if dns == '@current':
+            pass
+        elif bootProto == 'static':
+            if dns == '@clear':
+                try:
+                    del nic['ipConfig']['staticIpConfig']['dns']
+                except:
+                    pass
+            else:
+                if not ui.validate_ipv4_addr(dns):
+                    print(c.red("Invalid IP format for dns!\n"))
+                    return
+                nic['ipConfig']['staticIpConfig']['dns'] = dns
+        else:
+            print(c.red("Cannot specify dns when using bootProto=dhcp!\n"))
+            return
+        # externalAccessState
+        if externalAccessState != '@current':
+            if externalAccessState in ['CONDITIONAL_PUBLIC_IP', 'ALWAYS_PUBLIC_IP', 'ALWAYS_PORT_FORWARDING']:
+                nic['ipConfig']['externalAccessState'] = externalAccessState
+            else:
+                print(c.red("Invalid externalAccessState!"))
+                print("For valid choices, run command:")
+                print(c.BOLD("    /apps/{}/vms/{} help nic_edit\n".format(self.appName, self.vmName)))
+                return
+        if nic == nics[index]:
+            print(c.yellow("No changes were made to NIC!"))
+            print("Use tab-completion to specify changes via cmdline args or run:")
+            print(c.BOLD("    /apps/{}/vms/{} help nic_edit\n".format(self.appName, self.vmName)))
+            return
+        # Save changes back into vm object
+        nics[index] = nic
+        vm['networkConnections'] = nics
+        self.update_vm(vm, publishUpdates)
+    
+    def update_vm(self, vm, publishUpdates=True):
+        try:
+            newVm = rClient.update_vm({'id': self.appId}, vm)
+        except:
+            print(c.red("Problem updating VM!\n"))
+            raise
+        rCache.purge_app_cache(self.appId)
+        print(c.green("VM '{}' updated!\n".format(self.vmName)))
+        if self.parent.parent.confirm_app_is_published(quiet=True):
+            if publishUpdates:
+                self.parent.parent.publish_design_updates()
+            else:
+                print(c.yellow("\nPublish your design updates to the cloud later by running:"))
+                print(c.BOLD("    /apps/{}/ publish_design_updates".format(self.appName)))
+    
+    def ui_complete_nic_edit(self, parameters, text, current_param):
+        vm = rCache.get_vm(self.appId, self.vmId, aspect='design')
+        nics = vm.get('networkConnections', [])
+        nics = sorted(nics, key=lambda nic: nic['device']['index'])
+        try:
+            nic = nics[int(parameters['index'])]
+        except:
+            nic = None
+        if current_param == 'index':
+            indices = [str(n) for n in range(len(nics))]
+            indices.append('@prompt')
+            completions = [a for a in indices
+                           if a.startswith(text)]
+        elif current_param  == 'name':
+            names = ['@current']
+            if nic:
+                names.append(nic['name'])
+            completions = [a for a in names
+                           if a.startswith(text)]
+        elif current_param == 'mac':
+            macs = ['@current']
+            if nic:
+                macs.append(nic['device']['mac'])
+            completions = [a for a in macs
+                           if a.startswith(text)]
+        elif current_param == 'deviceType':
+            types = ['@current']
+            types.extend(self.validNicDeviceTypes)
+            completions = [a for a in types
+                           if a.startswith(text)]
+        elif current_param == 'bootProto':
+            protos = ['@current', 'static', 'dhcp']
+            completions = [a for a in protos
+                           if a.startswith(text)]
+        elif current_param == 'ip':
+            ips = ['@current', '10.0.0.0', '192.168.0.0', '172.16.0.0']
+            try:
+                ips.append(nic['ipConfig']['staticIpConfig']['ip'])
+            except:
+                pass
+            completions = [a for a in list(set(ips))
+                           if a.startswith(text)]
+        elif current_param == 'mask':
+            masks = ['@current', '255.0.0.0', '255.255.0.0', '255.255.255.0']
+            try:
+                masks.append(nic['ipConfig']['staticIpConfig']['mask'])
+            except:
+                pass
+            completions = [a for a in list(set(masks))
+                           if a.startswith(text)]
+        elif current_param == 'gateway':
+            gws = ['@current', '@clear']
+            try:
+                gws.append(nic['ipConfig']['staticIpConfig']['gateway'])
+            except:
+                pass
+            completions = [a for a in gws
+                           if a.startswith(text)]
+        elif current_param == 'dns':
+            dns = ['@current', '@clear']
+            try:
+                dns.append(nic['ipConfig']['staticIpConfig']['dns'])
+            except:
+                pass
+            completions = [a for a in dns
+                           if a.startswith(text)]
+        elif current_param == 'externalAccessState':
+            states = ['@current', 'CONDITIONAL_PUBLIC_IP', 'ALWAYS_PUBLIC_IP', 'ALWAYS_PORT_FORWARDING']
+            completions = [a for a in states
+                           if a.startswith(text)]
+        elif current_param == 'publishUpdates':
+            completions = [a for a in ['false', 'true']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
+    
+    def ui_command_nic_add(self, index='@auto', name='@auto', publishUpdates='true'):
+        """
+        Add a new NIC to the VM design.
+        
+        The *index* controls whether to append the NIC to the end of the list
+        of existing NICs or to insert it somewhere in the list. By default, the
+        new NIC will get added to the end, so e.g., on a VM with 2 existing
+        NICs (index 0 and index 1), the new NIC will be the 3rd and thus will
+        get index 2. In the same situation, setting index=0 would insert the
+        new NIC before the other two, changing their index numbers.
+        
+        *name* -- when not specified -- defaults to 'ethN' where N is the
+        *index* number.
+        
+        On creation, the NIC's useAutomaticMac property is set to True and
+        deviceType is set to virtio. All other values receive their default
+        settings per the API (e.g., DHCP will be enabled & externalAccessState
+        will be set to CONDITIONAL_PUBLIC_IP). Use the nic_edit command to make
+        any customizations.
+        
+        If application is already published, and *publishUpdates* is 'true'
+        (default), the design changes will be immediately published to the
+        cloud.
+        """
+        index = self.ui_eval_param(index, 'string', '@auto')
+        name = self.ui_eval_param(name, 'string', '@auto')
+        publishUpdates = self.ui_eval_param(publishUpdates, 'bool', True)
+        print()
+        vm = rCache.get_vm(self.appId, self.vmId, aspect='design')
+        if not vm.get('networkConnections'):
+            vm['networkConnections'] = []
+        nics = sorted(vm['networkConnections'], key=lambda nic: nic['device']['index'])
+        if index == '@auto':
+            # Append to end of list by default
+            index = len(nics)
+        else:
+            valid = [str(n) for n in range(len(nics) + 1)]
+            if index in valid:
+                index = int(index)
+            else:
+                # If supplied index is invalid ...
+                print(c.red("Invalid index number! Valid choices: {}\n".format(", ".join(valid))))
+                return
+        if name == '@auto':
+            name = 'eth{}'.format(index)
+        for n in range(len(nics)):
+            if n >= index:
+                nics[n]['device']['index'] += 1
+        nic = {
+            'name': name,
+            'device': {
+                'index': index,
+                'deviceType': 'virtio',
+                'useAutomaticMac': True
+                }
+            }
+        nics.insert(index, nic)
+        vm['networkConnections'] = nics
+        self.update_vm(vm, publishUpdates)
+    
+    def ui_complete_nic_add(self, parameters, text, current_param):
+        vm = rCache.get_vm(self.appId, self.vmId, aspect='design')
+        if current_param == 'index':
+            nics = vm.get('networkConnections', [])
+            indices = [str(n) for n in range(len(nics) + 1)]
+            indices.append('@auto')
+            completions = [a for a in indices
+                           if a.startswith(text)]
+        elif current_param  == 'name':
+            names = ['@auto']
+            try:
+                names.append('eth{}'.format(parameters['index']))
+            except:
+                pass
+            completions = [a for a in names
+                           if a.startswith(text)]
+        elif current_param == 'publishUpdates':
+            completions = [a for a in ['false', 'true']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
+    
+    def ui_command_nic_delete(self, index, publishUpdates='true'):
+        """
+        Delete an existing NIC from the VM design.
+        
+        NICs are numbered by *index*, starting at zero.
+        
+        If application is already published, and *publishUpdates* is 'true'
+        (default), the design changes will be immediately published to the
+        cloud.
+        """
+        publishUpdates = self.ui_eval_param(publishUpdates, 'bool', True)
+        print()
+        vm = rCache.get_vm(self.appId, self.vmId, aspect='design')
+        if not vm.get('networkConnections'):
+            print(c.red("This VM has no NICs!\n"))
+            return
+        nics = sorted(vm['networkConnections'], key=lambda nic: nic['device']['index'])
+        valid = [str(n) for n in range(len(nics))]
+        if index in valid:
+            index = int(index)
+        else:
+            print(c.red("Invalid index number! Valid choices: {}\n".format(", ".join(valid))))
+            return
+        for n in range(len(nics)):
+            if n > index:
+                nics[n]['device']['index'] -= 1
+        del nics[index]
+        vm['networkConnections'] = nics
+        self.update_vm(vm, publishUpdates)
+    
+    def ui_complete_nic_delete(self, parameters, text, current_param):
+        vm = rCache.get_vm(self.appId, self.vmId, aspect='design')
+        if current_param == 'index':
+            nics = vm.get('networkConnections', [])
+            indices = [str(n) for n in range(len(nics))]
+            completions = [a for a in indices
+                           if a.startswith(text)]
+        elif current_param == 'publishUpdates':
+            completions = [a for a in ['false', 'true']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
+    
+    def ui_command_nic_list(self):
+        """
+        List the NICs from the VM design.
+        
+        This command is a convenience function to show abbreviated info from
+        the design aspect of a particular VM. To see full details about a VM,
+        or to see deployment aspect (cloud) details, or to output to a file,
+        use the print_def command.
+        """
+        print()
+        vm = rCache.get_vm(self.appId, self.vmId, aspect='design')
+        if not vm.get('networkConnections'):
+            print(c.red("This VM has no NICs!\n"))
+            return
+        nics = sorted(vm['networkConnections'], key=lambda nic: nic['device']['index'])
+        print(ui.prettify_json(nics))
+        print()
+    
+    def ui_command_delete(self, noconfirm='false', publishUpdates='true'):
+        """
+        Delete a VM from the application design.
+
+        If application is already published, and *publishUpdates* is 'true'
+        (default), the design changes will be immediately published to the
+        cloud.
+        """
+        noconfirm = self.ui_eval_param(noconfirm, 'bool', False)
+        publishUpdates = self.ui_eval_param(publishUpdates, 'bool', True)
+        print()
+        if not noconfirm:
+            c.slow_print(c.RED("Deleting a VM cannot be undone -- All VM data will be lost\n"))
+            response = raw_input(c.CYAN("Continue with VM deletion? [y/N] "))
+            print()
+        if noconfirm or response == 'y':
+            try:
+                rClient.delete_vm_from_application(self.appId, self.vmId)
+            except:
+                print(c.red("Problem deleting VM!\n"))
+                raise
+            print(c.green("Deleted VM '{}'".format(self.vmName)))
+            if self.parent.parent.confirm_app_is_published(quiet=True):
+                if publishUpdates:
+                    self.parent.parent.publish_design_updates()
+                else:
+                    print(c.yellow("\nPublish your design updates to the cloud later by running:"))
+                    print(c.BOLD("    /apps/{}/ publish_design_updates".format(self.appName)))
+            self.parent.remove_child(self)
+            rCache.purge_app_cache(self.appId)
+        else:
+            print("Leaving VM intact")
+        print()
+    
+    def ui_complete_delete(self, parameters, text, current_param):
+        if current_param in ['noconfirm', 'publishUpdates']:
+            completions = [a for a in ['false', 'true']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
+    
+    def ui_command_update_from_file(self, inputFile, publishUpdates='true'):
+        """
+        Update a VM with design definition imported from json file.
+        
+        If application is already published, and *publishUpdates* is 'true'
+        (default), the design changes will be immediately published to the
+        cloud.
+        """
+        publishUpdates = self.ui_eval_param(publishUpdates, 'bool', True)
+        print()
+        try:
+            with open(path.expanduser(inputFile)) as f:
+                vm = json.load(f)
+        except:
+            print(c.red("Problem reading inputFile!\n"
+                        "File should be a json VM design definition as generated by print_def cmd\n"))
+            raise
+        appId = vm.get('applicationId')
+        if self.appId != appId:
+            print(c.red("The 'applicationId' from the imported json does not match appId for this VM!\n"))
+            return
+        vmId = vm.get('id')
+        if self.vmId != vmId:
+            print(c.red("The 'id' from the imported json does not match vmId for this VM!\n"))
+            return
+        self.update_vm(vm, publishUpdates)
+    
+    def ui_complete_update_from_file(self, parameters, text, current_param):
+        if current_param == 'inputFile':
+            return _complete_path(text)
+        elif current_param == 'publishUpdates':
+            completions = [a for a in ['false', 'true']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
 
 
 class Shared(ConfigNode):
@@ -2864,10 +3412,13 @@ class Share(ConfigNode):
         description = "share definition for {} {} (/shared/{}/{}/{})".format(
             self.resourceType, self.resource, self.parent.parent.name, self.parent.name, self.name)
         ui.print_obj(rCache.get_share(self.shareId), description, outputFile,
-            tmpPrefix='share={}_{}'.format(self.resourceType, self.shareId))
+            tmpPrefix='share_{}_{}'.format(self.resourceType, self.shareId))
         
     def ui_complete_print_def(self, parameters, text, current_param):
-        return _complete_print_obj(parameters, text, current_param)
+        if current_param == 'outputFile':
+            return _complete_path(text)
+        else:
+            return []
     
     def delete(self):
         try:
@@ -3008,7 +3559,10 @@ class Keypairs(ConfigNode):
         print()
     
     def ui_complete_upload_new_pubkey(self, parameters, text, current_param):
-        return _complete_print_obj(parameters, text, current_param, param_name='inputFile')
+        if current_param == 'inputFile':
+            return _complete_path(text)
+        else:
+            return []
 
 
 class Keypair(ConfigNode):
@@ -3056,10 +3610,13 @@ class Keypair(ConfigNode):
         description = "key pair definition for '{}' (/keypairs/{})".format(
             self.kp['name'], self.kp['id'])
         ui.print_obj(self.kp, description, outputFile,
-            tmpPrefix='keypair={}'.format(self.kp['id']))
+            tmpPrefix='keypair_{}'.format(self.kp['id']))
     
     def ui_complete_print_def(self, parameters, text, current_param):
-        return _complete_print_obj(parameters, text, current_param)
+        if current_param == 'outputFile':
+            return _complete_path(text)
+        else:
+            return []
     
     def delete(self):
         try:

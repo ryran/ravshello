@@ -14,6 +14,7 @@ from distutils.spawn import find_executable
 from sys import stdout
 import subprocess
 import json
+import re
 
 # Custom modules
 from . import cfg
@@ -139,6 +140,7 @@ def print_obj(obj, desc, output='@EDITOR', tmpPrefix='', suffix='.json'):
         tmp.flush()
         subprocess.call([cmd, tmp.name])
     else:
+        output = path.expanduser(output)
         if suffix:
             output += suffix
         try:
@@ -227,3 +229,18 @@ def expand_secs_to_ywdhms(seconds):
                 unit = unit.rstrip('s')
             result.append("{} {}".format(value, unit))
     return ', '.join(result)
+
+def validate_ipv4_addr(ipstring):
+    """Ensure that string is a valid IPv4 address in decimal."""
+    pieces = ipstring.split('.')
+    if len(pieces) != 4:
+        return False
+    try:
+        return all(0<=int(p)<256 for p in pieces)
+    except ValueError:
+        return False
+
+def validate_mac_addr(macstring):
+    """Ensure that string is a valid MAC address in standard format."""
+    regexstr = "[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}:[0-9a-f]{2}$"
+    return re.match(regexstr, macstring.lower())
