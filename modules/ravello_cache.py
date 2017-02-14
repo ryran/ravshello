@@ -80,10 +80,20 @@ class RavelloCache(object):
         else:
             self.appCache = {}
     
-    def get_app(self, appId):
-        if appId not in self.appCache or ui.get_timestamp_proximity(self.appCache[appId]['ts']) < -60:
+    def get_app(self, appId, aspect=None):
+        if appId not in self.appCache or ui.get_timestamp_proximity(self.appCache[appId]['ts']) < -120:
             self.update_app_cache(appId)
-        return self.appCache[appId]['definition']
+        if aspect:
+            return self.appCache[appId]['definition'][aspect]
+        else:
+            return self.appCache[appId]['definition']
+    
+    def get_vm(self, appId, vmId, aspect):
+        if appId not in self.appCache or ui.get_timestamp_proximity(self.appCache[appId]['ts']) < -120:
+            self.update_app_cache(appId)
+        for vm in self.appCache[appId]['definition'][aspect]['vms']:
+            if vm['id'] == vmId:
+                return vm
     
     def update_user_cache(self):
         self._userCache_tstamp = time()

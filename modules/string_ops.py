@@ -22,7 +22,7 @@ def slow_print(string, interval=.02):
     print()
 
 def replace_bad_chars_with_underscores(string,
-        pattern='[^A-Za-z0-9:_.-]', repl='_', count=0):
+        pattern='[^A-Za-z0-9:_.~-]', repl='_', count=0):
     """Perform some simple character substitution on *string*."""
     return sub(pattern, repl, string, count)
 
