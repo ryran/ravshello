@@ -1679,13 +1679,13 @@ class App(ConfigNode):
         return (status, hazHappy)
     
     def print_message_app_not_published(self):
-        print(c.red("Application has not been published yet!\n"))
+        print(c.red("\nApplication has not been published yet!\n"))
         print("To publish application, run command:")
         print(c.BOLD("    /apps/{}/ publish\n".format(self.appName)))
     
     def confirm_app_is_published(self, quiet=False):
         published = rClient.is_application_published(self.appId)['value']
-        if not quiet:
+        if not (published or quiet):
             self.print_message_app_not_published()
         return published
     
@@ -1988,8 +1988,6 @@ class App(ConfigNode):
         return allVmsAreStarted, allVmsAreStopped
     
     def extend_autostop(self, minutes=60):
-        if not self.confirm_app_is_published():
-            return False
         req = {'expirationFromNowSeconds': minutes * 60}
         try:
             rClient.set_application_expiration(self.appId, req)
@@ -2009,13 +2007,15 @@ class App(ConfigNode):
         Admins can set any value, including '-1' which disables auto-stop timer.
         """
         minutes = self.ui_eval_param(minutes, 'number', cfg.defaultAppExtendTime)
+        if not self.confirm_app_is_published():
+            return
         if not is_admin():
             if minutes > cfg.maxLearnerExtendTime:
-                print(c.red("\nUsing maximum learner auto-stop time of {} minutes"
+                print(c.red("Using maximum learner auto-stop time of {} minutes"
                             .format(cfg.maxLearnerExtendTime)))
                 minutes = cfg.maxLearnerExtendTime
             elif minutes < 0:
-                print(c.RED("\nInvalid learner auto-stop time\n"))
+                print(c.RED("Invalid learner auto-stop time\n"))
                 return
         self.extend_autostop(minutes)
         print()
@@ -2077,12 +2077,16 @@ class App(ConfigNode):
         return completions
     
     def delete_app(self):
+        if self.confirm_app_is_published(quiet=True):
+            published = True
+        else:
+            published = False
         try:
             rClient.delete_application(self.appId)
         except:
             print(c.red("Problem deleting app!\n"))
             raise
-        if self.confirm_app_is_published(quiet=True):
+        if published:
             self.parent.numberOfPublishedApps -= 1
         rCache.purge_app_cache(self.appId)
         self.parent.numberOfApps -= 1
