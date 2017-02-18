@@ -32,13 +32,19 @@ def authorize_user():
         user = c.replace_bad_chars_with_underscores(nick)
         if nick != user:
             print(c.yellow("    Invalid characters replaced w/underscores"))
-        print(c.GREEN("  Using entry '{}' for nickname".format(user)))
-    elif nick:
+        print(c.GREEN("  Using input '{}' for nickname".format(user)))
+    elif cfg.opts.nick is not None:
+        nick = cfg.opts.nick
+        user = c.replace_bad_chars_with_underscores(nick)
+        if nick != user:
+            print(c.yellow("    Invalid characters replaced w/underscores"))
+        print(c.GREEN("  Using cmdline arg '{}' for nickname".format(user)))
+    elif nick is not None:
         user = nick
-        print(c.GREEN("  Using profile-specified nick '{}' for nickname".format(user)))
-    elif cfgNick:
+        print(c.GREEN("  Using profile-specified '{}' for nickname".format(user)))
+    elif cfgNick is not None:
         user = cfgNick
-        print(c.GREEN("  Using configfile-specified nick '{}' for nickname".format(user)))
+        print(c.GREEN("  Using configfile-specified '{}' for nickname".format(user)))
     else:
         user = pwd.getpwuid(os.getuid()).pw_name
         print(c.GREEN("  Using system user '{}' for nickname".format(user)))

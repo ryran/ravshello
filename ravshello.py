@@ -28,6 +28,24 @@ from modules import string_ops as c
 from modules import ravello_cache
 from modules import auth_local, auth_ravello, user_interface, cfg
 
+class CustomFormatter(argparse.RawDescriptionHelpFormatter):
+    """This custom formatter eliminates the duplicate metavar in help lines."""
+    def _format_action_invocation(self, action):
+        if not action.option_strings:
+            metavar, = self._metavar_formatter(action, action.dest)(1)
+            return metavar
+        else:
+            parts = []
+            if action.nargs == 0:
+                parts.extend(action.option_strings)
+            else:
+                default = action.dest.upper()
+                args_string = self._format_args(action, default)
+                for option_string in action.option_strings:
+                    parts.append('%s' % option_string)
+                parts[-1] += ' %s'%args_string
+            return ', '.join(parts)
+
 def main():
     """Parse cmdline args, configure prefs, login, and start captive UI."""
     # Setup parser
@@ -42,8 +60,11 @@ def main():
               "  Report bugs/RFEs/feedback at https://github.com/ryran/ravshello/issues"
               .format(cfg.prog, cfg.version))
     p = argparse.ArgumentParser(
-        prog=cfg.prog, description=description, add_help=False, epilog=epilog,
-        formatter_class=argparse.RawDescriptionHelpFormatter)
+        prog=cfg.prog,
+        description=description,
+        add_help=False,
+        epilog=epilog,
+        formatter_class=lambda prog: CustomFormatter(prog))
     
     # Setup groups for help page:
     grpU = p.add_argument_group('UNIVERSAL OPTIONS')
@@ -56,18 +77,25 @@ def main():
         '-h', '--help',  dest='showHelp', action='store_true',
         help="Show this help message and exit")
     grpU.add_argument(
-        '-u',  dest='ravelloUser', metavar='USER', default='',
+        '-u',  '--user', dest='ravelloUser', metavar='USER', default='',
         help=("Explicitly specify Ravello username or profile name from {} "
               "config file (will automatically prompt for passphrase if none "
               "is present in cfgfile)".format(cfg.defaultUserCfgFile)))
     grpU.add_argument(
-        '-p', dest='ravelloPass', metavar='PASSWD', default='',
+        '-p', '--passwd', dest='ravelloPass', metavar='PASSWD', default='',
         help=("Explicitly specify a Ravello user password on the command-line "
               "(unsafe on multi-user system)"))
-    grpU.add_argument(
-        '-k', '--nick', dest='promptNickname', action='store_true',
-        help=("Prompt for nickname to use for app-filtering (nickname is "
-              "normally determined from the system user name)"))
+    grpU_0 = grpU.add_mutually_exclusive_group()
+    grpU_0.add_argument(
+        '-k', '--nick', dest='nick',
+        help=("Explicitly specify a nickname to use for app-filtering "
+              "(nickname is normally determined from the system user name "
+              "and is used to hide applications that don't start with "
+              "'k:NICK__'; any apps created will also have that tag prefixed "
+              "to their name)"))
+    grpU_0.add_argument(
+        '--prompt-nick', dest='promptNickname', action='store_true',
+        help="Prompt for nickname to use for app-filtering")
     grpU.add_argument(
         '-n', '--nocolor', dest='enableColor', action='store_false',
         help="Disable all color terminal enhancements")
@@ -88,7 +116,10 @@ def main():
         help="Hide verbose messages during startup")
     grpU.add_argument(
         '-d', '--debug', dest='enableDebugging', action='store_true',
-        help="Turn on debugging features to help troubleshoot a problem")
+        help=("Turn on debugging features to help troubleshoot a problem "
+              "(critically, this disables some ConfigShell exception-handling "
+              "so that errors in commands will cause {} to exit"
+              .format(cfg.prog)))
     grpU.add_argument(
         '-V', '--version', action='version', version=cfg.version)
     
@@ -100,16 +131,23 @@ def main():
         '-A', '--allapps', dest='showAllApps', action='store_true',
         help=("Show all applications, including ones not associated with your "
               "user (automatically triggers --admin option)"))
-    grpA.add_argument(
-        '-s', dest='scriptFile', metavar='FILE',
-        help=("Specify a script file containing newline-delimited commands "
-              "(commands will be executed instead of entering the "
-              "interactive shell)"))
+    grpA_0 = grpA.add_mutually_exclusive_group()
+    grpA_0.add_argument(
+        '-0', '--stdin', dest='useStdin', action='store_true',
+        help=("Enable reading newline-delimited ravshello commands from stdin"
+              "(these commands will be executed instead of entering the"
+              "interactive shell -- automatic exit after last cmd)"))
+    grpA_0.add_argument(
+        '-s', '--script', dest='scriptFile', metavar='FILE',
+        help=("Specify a script file containing newline-delimited ravshello "
+              "commands (these commands will be executed instead of entering "
+              "the interactive shell -- automatic exit after last cmd)"))
     grpA.add_argument(
         'cmdlineArgs', metavar='COMMANDS', nargs=argparse.REMAINDER,
-        help=("If any additional cmdline args are present, the interactive shell is "
-              "skipped; instead each word will be executed as a separate command "
-              "(ensure each command is quoted to protect from shell expansion!)"))
+        help=("If any additional cmdline args are present, each shell word "
+              "will be treated as a separate ravshello command and they will "
+              "all be executed prior to entering the interactive shell "
+              "(ensure each cmd is quoted to protect from shell expansion!)"))
     
     # Build out options namespace
     cfg.opts = rOpt = p.parse_args()

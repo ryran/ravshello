@@ -111,6 +111,11 @@ def main():
     shell.prefs['prompt_length'] = 0
     shell.prefs['tree_show_root'] = True
     shell.prefs['tree_status_mode'] = True
+    shell.prefs['loglevel_console'] = 'info'
+    shell.prefs['loglevel_file'] = 'info'
+    if rOpt.enableDebugging:
+        shell.prefs['loglevel_console'] = 'verbose'
+        shell.prefs['loglevel_file'] = 'debug'
     if not c.enableColor:
         shell.prefs['color_mode'] = False
     if not rOpt.showAllApps:
@@ -128,27 +133,9 @@ def main():
     c.verbose("Done!\n")
     # For some reason sleep is necessary here to fix issue #49
     sleep(0.1)
-    if is_admin() and rOpt.cfgFile.get('preRunCommands') and not rOpt.scriptFile:
-        for cmd in rOpt.cfgFile['preRunCommands']:
-            shell.run_cmdline(cmd)
-    if is_admin() and rOpt.cmdlineArgs:
-        # Run args non-interactively
-        if rOpt.scriptFile:
-            print(c.yellow("Ignoring script file because cmdline args present\n"))
-        for cmd in rOpt.cmdlineArgs:
-            shell.run_cmdline(cmd)
-        shell.run_interactive(exit_on_error=rOpt.enableDebugging)
-    elif is_admin() and rOpt.scriptFile:
-        # Run script file non-interactively
-        try:
-            shell.run_script(rOpt.scriptFile)
-        except:
-            print(c.red("Unable to open script file\n"))
-    elif is_admin():
-        shell.run_interactive(exit_on_error=rOpt.enableDebugging)
-    else:
+    if not is_admin():
         # What to do when not admin
-        if rOpt.cmdlineArgs or rOpt.scriptFile:
+        if rOpt.cmdlineArgs or rOpt.scriptFile or rOpt.useStdin:
             print(c.red("Sorry! Only admins are allowed to use {} non-interactively\n".format(cfg.prog)))
             return
         try:
@@ -174,6 +161,36 @@ def main():
         print(" │   - Optional: use `{}` command to add an hour to the timer".format(c.BOLD('extend_autostop')))
         print(" └──────────────────────────────────────────────────────────────────────────────\n")
         shell.run_interactive(exit_on_error=rOpt.enableDebugging)
+        return
+    if rOpt.useStdin:
+        # If stdin was requested, read that in favor of anything else and then exit
+        if rOpt.scriptFile or rOpt.cmdlineArgs:
+            print(c.yellow("Ignoring script-file/cmdline-args because -0/--stdin was requested\n"))
+        shell.run_stdin(exit_on_error=rOpt.enableDebugging)
+        return
+    if rOpt.scriptFile:
+        # If script was requested, read that in favor of cmdline args and then exit
+        if rOpt.cmdlineArgs:
+            print(c.yellow("Ignoring cmdline-args because -s/--script was requested\n"))
+        shell.run_script(rOpt.scriptFile, exit_on_error=rOpt.enableDebugging)
+        return
+    # List of commands to run before entering interactive shell
+    cmds = []
+    # If have preRunCommands from config file, use them to start our list of things to run
+    cmds.extend(rOpt.cfgFile.get('preRunCommands', []))
+    # If have cmdline args, add them to list of things to run
+    cmds.extend(rOpt.cmdlineArgs)
+    # Run
+    for cmd in cmds:
+        try:
+            shell.run_cmdline(cmd)
+        except:
+            if rOpt.enableDebugging:
+                raise
+            else:
+                print(c.red("Continuing despite error running cmd: '{}'".format(cmd)))
+    # If we're still here, enter interactive cmdline
+    shell.run_interactive(exit_on_error=rOpt.enableDebugging)
 
 
 class RavelloRoot(ConfigNode):
@@ -1437,7 +1454,7 @@ class Applications(ConfigNode):
     
     def ui_command_new(self, blueprint='@prompt', name='@prompt',
             desc='@prompt', publish='true', region='@prompt',
-            startAllVms='true'):
+            startAllVms='true', allowExactName='false'):
         """
         Interactively create a new application from a base blueprint.
         
@@ -1449,6 +1466,10 @@ class Applications(ConfigNode):
         
         If run with publish=false, the publish command can be run
         later from the app-specific context (/apps/APPNAME/).
+        
+        Also note that with the default behavior of allowExactName=false, a
+        unique number will be appended to the end of the requested app name in
+        order to avoid name collisions.
         """
         blueprint = self.ui_eval_param(blueprint, 'string', '@prompt')
         name = self.ui_eval_param(name, 'string', '@prompt')
@@ -1457,6 +1478,7 @@ class Applications(ConfigNode):
         region = self.ui_eval_param(region, 'string', '@prompt')
         startAllVms = self.ui_eval_param(startAllVms, 'bool', True)
         startAllVms = self.ui_type_bool(startAllVms, reverse=True)
+        allowExactName = self.ui_eval_param(allowExactName, 'bool', False)
         
         # Check for available blueprints first
         allowedBlueprints = []
@@ -1520,7 +1542,8 @@ class Applications(ConfigNode):
         appName = appnamePrefix + appName
         
         # Ensure there's not already an app with that name
-        appName = ravello_sdk.new_name(rClient.get_applications(), appName + '_')
+        if not allowExactName:
+            appName = ravello_sdk.new_name(rClient.get_applications(), appName + '_')
         
         if desc == '@prompt':
             # Prompt for description
@@ -1577,7 +1600,7 @@ class Applications(ConfigNode):
         elif current_param in ['name', 'desc']:
             completions = [a for a in ['@prompt', '@auto']
                            if a.startswith(text)]
-        elif current_param == 'publish':
+        elif current_param in ['publish', 'startAllVms', 'allowExactName']:
             completions = [a for a in ['true', 'false']
                            if a.startswith(text)]
         elif current_param == 'region':
@@ -1608,9 +1631,6 @@ class Applications(ConfigNode):
                         L.append(p['regionName'])
                     completions = [a for a in L
                                    if a.startswith(text)]
-        elif current_param == 'startAllVms':
-            completions = [a for a in ['true', 'false']
-                           if a.startswith(text)]
         else:
             completions = []
         if len(completions) == 1:
@@ -2138,7 +2158,7 @@ class App(ConfigNode):
         if self.confirm_app_is_published():
             self.publish_design_updates()
     
-    def ui_command_publish(self, region='@prompt', startAllVms='true'):
+    def ui_command_publish(self, region='@prompt', startAllVms='true', loopQueryStatus='true'):
         """
         Interactively publish an application to the cloud.
         
@@ -2147,6 +2167,7 @@ class App(ConfigNode):
         """
         region = self.ui_eval_param(region, 'string', '@prompt')
         startAllVms = self.ui_eval_param(startAllVms, 'bool', True)
+        loopQueryStatus = self.ui_eval_param(loopQueryStatus, 'bool', True)
         # Sanity check
         if self.confirm_app_is_published(quiet=True):
             print(c.red("\nApplication already published!\n"))
@@ -2211,7 +2232,8 @@ class App(ConfigNode):
         # Configure auto-stop
         if startAllVms:
             self.extend_autostop(minutes=cfg.defaultAppExpireTime)
-            self.loop_query_status(desiredState='STARTED')
+            if loopQueryStatus:
+                self.loop_query_status(desiredState='STARTED')
         else:
             rCache.purge_app_cache(self.appId)
             print()
@@ -2224,7 +2246,7 @@ class App(ConfigNode):
                 L.append(p['regionName'])
             completions = [a for a in L
                            if a.startswith(text)]
-        elif current_param == 'startAllVms':
+        elif current_param in ['startAllVms', 'loopQueryStatus']:
             completions = [a for a in ['true', 'false']
                            if a.startswith(text)]
         else:
@@ -2417,7 +2439,7 @@ class Vm(ConfigNode):
     
     def confirm_app_is_published(self, quiet=False):
         return self.parent.parent.confirm_app_is_published(quiet)
-        
+    
     def ui_command_print_def(self, outputFile='@EDITOR', aspect='@auto'):
         """
         Pretty-print JSON defininition of VM.
@@ -2458,6 +2480,107 @@ class Vm(ConfigNode):
         else:
             completions = []
         return completions
+    
+    def get_ssh_details(self):
+        rCache.purge_app_cache(self.appId)
+        app = rCache.get_app(self.appId, aspect='deployment')
+        for vm in app['vms']:
+            if vm['id'] == self.vmId:
+                break
+        if not (vm.has_key('networkConnections') or vm.has_key('suppliedServices')):
+            return None
+        sshKey = ""
+        if rOpt.cfgFile['sshKeyFile']:
+            sshKey = rOpt.cfgFile['sshKeyFile']
+        for nic in vm['networkConnections']:
+            fqdn = nic['ipConfig'].get('fqdn', "")
+            for svc in vm['suppliedServices']:
+                if fqdn and svc['name'] == 'ssh' and svc['external'] and svc.has_key('externalPort') and svc['useLuidForIpConfig'] and nic['ipConfig']['id'] == svc['ipConfigLuid']:
+                    return {'ssh_fqdn': fqdn, 'ssh_port': svc['externalPort'], 'ssh_key': sshKey}
+        return None
+    
+    def ui_command_ssh_cmd(self, outputFile='@term', quiet='false',
+            loopUntilSuccess='false', intervalSec=20):
+        """
+        Get ssh command that could be used to ssh into deployed VM.
+        
+        When *outputFile* is set to anything other than default of '@term',
+        the name=value pairs will be written to that file, e.g.:
+            ssh_port=22
+            ssh_fqdn=myvm-myapp-izmow52k.srv.ravcloud.com
+            ssh_key=~/some/ssh/pubkey
+        
+        With *quiet* set to default of 'false', extra details are printed to
+        the screen, regardless of the value of *outputFile*.
+        
+        With quiet=true and outputFile=@term, only the ssh command is printed.
+        With quiet=true and outputFile=FILE, only the name=value pairs are
+        saved to FILE.
+        """
+        outputFile = self.ui_eval_param(outputFile, 'string', '@term')
+        quiet = self.ui_eval_param(quiet, 'bool', False)
+        loopUntilSuccess = self.ui_eval_param(loopUntilSuccess, 'bool', False)
+        intervalSec = self.ui_eval_param(intervalSec, 'number', 20)
+        if outputFile == '@term':
+            outputFile = None
+        else:
+            try:
+                outputFile = open(path.expanduser(outputFile), 'w')
+            except:
+                print(c.red("\nError opening outputFile for writing!\n"))
+                raise
+        if not quiet:
+            print()
+        if not self.confirm_app_is_published():
+            return
+        while 1:
+            sshDetails = self.get_ssh_details()
+            if sshDetails:
+                if not quiet:
+                    sshKey = sshDetails['ssh_key']
+                    if sshKey:
+                        sshKey = " -i {}".format(sshKey)
+                    port = ""
+                    if sshDetails['ssh_port'] != "22":
+                        port = " -p {}".format(sshDetails['ssh_port'])
+                    sshCommand = "ssh{}{} root@{}".format(sshKey, port, sshDetails['ssh_fqdn'])
+                    print(c.BOLD(self.vmName))
+                    print("   SSH Command:   {}".format(c.cyan(sshCommand)))
+                if outputFile:
+                    for k, v in sshDetails.iteritems():
+                        print("{}={}".format(k, v), file=outputFile)
+                break
+            else:
+                if not quiet:
+                    print(c.yellow("VM {} does not (yet) offer a suppliedService tagged as 'ssh'".format(self.vmName)))
+                if not loopUntilSuccess:
+                    break
+            i = intervalSec
+            if quiet:
+                sleep(i)
+            else:
+                while i >= 0:
+                    print(c.REVERSE("{}".format(i)), end='')
+                    stdout.flush()
+                    sleep(1)
+                    print('\033[2K', end='')
+                    i -= 1
+                print()
+        if outputFile:
+            outputFile.close()
+        if not quiet:
+            print()
+    
+    def ui_complete_ssh_cmd(self, parameters, text, current_param):
+        if current_param in ['loopUntilSuccess', 'quiet']:
+            completions = [a for a in ['false', 'true']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
     
     def ui_command_start(self):
         """
@@ -2587,7 +2710,7 @@ class Vm(ConfigNode):
     def ui_command_nic_edit(self, index='@prompt', name='@current', mac='@current',
             deviceType='@current', bootProto='@current', ip='@current', mask='@current',
             gateway='@current', dns='@current', externalAccessState='@current',
-            publishUpdates='true'):
+            publishUpdates='true', forceRefresh='false'):
         """
         Edit an existing NIC in the VM design.
         
@@ -2621,6 +2744,12 @@ class Vm(ConfigNode):
         (default), the design changes will be immediately published to the
         cloud.
         
+        The *forceRefresh* option disables the check that compares the NIC at
+        the start with the NIC at the end, allowing to run, e.g.:
+            nic_edit 0 forceRefresh=true
+        This was added because we've run into situations where this cleared
+        invalid design validation errors.
+        
         Feel free to file RFEs for extra things that haven't been implemented.
         """
         index = self.ui_eval_param(index, 'string', '@prompt')
@@ -2634,6 +2763,7 @@ class Vm(ConfigNode):
         dns = self.ui_eval_param(dns, 'string', '@current')
         externalAccessState = self.ui_eval_param(externalAccessState, 'string', '@current')
         publishUpdates = self.ui_eval_param(publishUpdates, 'bool', True)
+        forceRefresh = self.ui_eval_param(forceRefresh, 'bool', False)
         print()
         vm = rCache.get_vm(self.appId, self.vmId, aspect='design')
         if not vm.get('networkConnections'):
@@ -2769,7 +2899,7 @@ class Vm(ConfigNode):
                 print("For valid choices, run command:")
                 print(c.BOLD("    /apps/{}/vms/{} help nic_edit\n".format(self.appName, self.vmName)))
                 return
-        if nic == nics[index]:
+        if nic == nics[index] and not forceRefresh:
             print(c.yellow("No changes were made to NIC!"))
             print("Use tab-completion to specify changes via cmdline args or run:")
             print(c.BOLD("    /apps/{}/vms/{} help nic_edit\n".format(self.appName, self.vmName)))
@@ -2864,7 +2994,7 @@ class Vm(ConfigNode):
             states = ['@current', 'CONDITIONAL_PUBLIC_IP', 'ALWAYS_PUBLIC_IP', 'ALWAYS_PORT_FORWARDING']
             completions = [a for a in states
                            if a.startswith(text)]
-        elif current_param == 'publishUpdates':
+        elif current_param in ['publishUpdates', 'forceRefresh']:
             completions = [a for a in ['false', 'true']
                            if a.startswith(text)]
         else:
