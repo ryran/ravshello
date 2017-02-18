@@ -134,8 +134,8 @@ def main():
     grpA_0 = grpA.add_mutually_exclusive_group()
     grpA_0.add_argument(
         '-0', '--stdin', dest='useStdin', action='store_true',
-        help=("Enable reading newline-delimited ravshello commands from stdin"
-              "(these commands will be executed instead of entering the"
+        help=("Enable reading newline-delimited ravshello commands from stdin "
+              "(these commands will be executed instead of entering the "
               "interactive shell -- automatic exit after last cmd)"))
     grpA_0.add_argument(
         '-s', '--script', dest='scriptFile', metavar='FILE',
