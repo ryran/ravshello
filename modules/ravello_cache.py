@@ -20,6 +20,7 @@ class RavelloCache(object):
         self.userCache = {}
         self.alertCache = {}
         self.shareCache = {}
+        self.kpCache = {}
     
     def update_bp_cache(self):
         self._bpCache_tstamp = time()
@@ -188,3 +189,39 @@ class RavelloCache(object):
             if ui.get_timestamp_proximity(ts) < -120:
                 self.update_share_cache()
         return self.shareCache.values()
+    
+    def update_keypair_cache(self):
+        self._kpCache_tstamp = time()
+        self.kpCache = {}
+        for k in self.r.get_keypairs():
+            self.kpCache[k['id']] = k
+    
+    def purge_keypair_cache(self, kpId=None):
+        if kpId:
+            if kpId in self.kpCache:
+                del self.kpCache[kpId]
+        else:
+            self.kpCache = {}
+    
+    def get_keypair(self, kpId):
+        try:
+            ts = self._kpCache_tstamp
+        except:
+            self.update_keypair_cache()
+        else:
+            if ui.get_timestamp_proximity(ts) < -120:
+                self.update_keypair_cache()
+        if kpId in self.kpCache:
+            return self.kpCache[kpId]
+        else:
+            return None
+    
+    def get_keypairs(self):
+        try:
+            ts = self._kpCache_tstamp
+        except:
+            self.update_keypair_cache()
+        else:
+            if ui.get_timestamp_proximity(ts) < -120:
+                self.update_keypair_cache()
+        return self.kpCache.values()

@@ -2707,6 +2707,92 @@ class Vm(ConfigNode):
         print(c.yellow("\nAPI 'repair' call was sent; check VM status\n"))
         rCache.purge_app_cache(self.appId)
     
+    def ui_command_cloudinit_enable(self, enabled='true', publishUpdates='true'):
+        """
+        Enable or (disable) Cloud-Init for this VM.
+        """
+        enabled = self.ui_eval_param(enabled, 'bool', True)
+        publishUpdates = self.ui_eval_param(publishUpdates, 'bool', True)
+        print()
+        if self.confirm_app_is_published(quiet=True):
+            # FIXME: We should be checking if the **VM** is published; not the app
+            print(c.red("Cloud Init cannot be modified after VM is published!\n"))
+            return
+        vm = rCache.get_vm(self.appId, self.vmId, aspect='design')
+        if enabled:
+            adjective = "enabled"
+        else:
+            adjective = "disabled"
+        if vm['supportsCloudInit'] == enabled:
+            print(c.yellow("No change was made! Cloud-Init is already {} for this VM!\n".format(adjective)))
+            return
+        vm['supportsCloudInit'] = enabled
+        self.update_vm(vm, publishUpdates)
+    
+    def ui_complete_cloudinit_enable(self, parameters, text, current_param):
+        if current_param in ['enabled', 'publishUpdates']:
+            completions = [a for a in ['false', 'true']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
+    
+    def ui_command_cloudinit_keypair(self, keypair='@prompt', publishUpdates='true'):
+        """
+        Configure application to pass a Ravello "Key Pair" (ssh pubkey) to VM.
+        
+        This requires the VM has Cloud-Init installed.
+        """
+        keypair = self.ui_eval_param(keypair, 'string', '@prompt')
+        publishUpdates = self.ui_eval_param(publishUpdates, 'bool', True)
+        print()
+        if self.confirm_app_is_published(quiet=True):
+            # FIXME: We should be checking if the **VM** is published; not the app
+            print(c.red("Cloud Init cannot be modified after VM is published!\n"))
+            return
+        keypairs = rCache.get_keypairs()
+        kpNames = [kp['name'] for kp in keypairs]
+        if keypair == '@prompt':
+            print(c.BOLD("Keypairs available to you:"))
+            for i, kp in enumerate(kpNames):
+                print("  {})  {}".format(c.cyan(i), c.replace_bad_chars_with_underscores(kp)))
+            selection = ui.prompt_for_number(
+                c.CYAN("\nEnter number of kp: "), endRange=i)
+            kpName = keypair = kpNames[selection]
+        elif keypair in [c.replace_bad_chars_with_underscores(k) for k in kpNames]:
+            kpName = keypair
+        else:
+            print(c.red("Invalid keypair name! Use tab-completion or check /keypairs!\n"))
+            return
+        kpId = [kp['id'] for kp in keypairs if kp['name'] == kpName][0]
+        vm = rCache.get_vm(self.appId, self.vmId, aspect='design')
+        if vm.get('keypairId', None) == kpId:
+            print(c.yellow("No change was made! This VM is already set to use key pair '{}' with ID {}!".format(kpName, kpId)))
+            return
+        vm['keypairId'] = kpId
+        vm['keypairName'] = rCache.get_keypair(kpId)['name']
+        vm['supportsCloudInit'] = True
+        self.update_vm(vm, publishUpdates)
+    
+    def ui_complete_cloudinit_keypair(self, parameters, text, current_param):
+        if current_param == 'keypair':
+            kpNames = [c.replace_bad_chars_with_underscores(kp['name'])
+                       for kp in rCache.get_keypairs()]
+            completions = [a for a in kpNames
+                           if a.startswith(text)]
+        elif current_param == 'publishUpdates':
+            completions = [a for a in ['false', 'true']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
+
     def ui_command_nic_edit(self, index='@prompt', name='@current', mac='@current',
             deviceType='@current', bootProto='@current', ip='@current', mask='@current',
             gateway='@current', dns='@current', externalAccessState='@current',
@@ -3623,7 +3709,8 @@ class Keypairs(ConfigNode):
     def refresh(self):
         self._children = set([])
         self.numberOfKps = 0
-        for kp in rClient.get_keypairs():
+        rCache.purge_keypair_cache()
+        for kp in rCache.get_keypairs():
             Keypair(kp, self)
         self.isPopulated = True
     
@@ -3671,12 +3758,12 @@ class Keypairs(ConfigNode):
             with open(path.expanduser(inputFile)) as f:
                 pubkeyData = f.read()
         except:
-            print(c.RED("Problem reading pubkey file!\n"))
+            print(c.RED("Problem reading pubkey file '{}'!\n".format(inputFile)))
             raise
         if name == '@prompt':
             name = raw_input(c.CYAN("\nEnter a unique name for your new public key: "))
             if len(name):
-                if any(name == k['name'] for k in rClient.get_keypairs()):
+                if any(name == k['name'] for k in rCache.get_keypairs()):
                     print(c.red("\nA key by that name already exists in your account!\n"))
                     return
             else:
@@ -3689,6 +3776,7 @@ class Keypairs(ConfigNode):
             print(c.red("\nProblem uploading new public key!\n"))
             raise
         print(c.green("\nSUCCESS! New public key '{}' ({}) uploaded!".format(kp['name'], kp['id'])))
+        rCache.purge_keypair_cache()
         Keypair(kp, self)
         print()
     
@@ -3759,6 +3847,7 @@ class Keypair(ConfigNode):
             print(c.red("Problem deleting public key!\n"))
             raise
         self.parent.numberOfKps -= 1
+        rCache.purge_keypair_cache(self.kp['id'])
         print(c.green("Deleted public key '{}' ({})\n".format(self.kp['name'], self.kp['id'])))
         self.parent.remove_child(self)
     
@@ -3813,6 +3902,7 @@ class Keypair(ConfigNode):
             print(c.red("\nProblem renaming public key!\n"))
             raise
         print(c.green("\nSUCCESS! Public key {} renamed from '{}' to '{}'!".format(self.kp['id'], self.kp['name'], kp['name'])))
+        rCache.purge_keypair_cache(self.kp['id'])
         Keypair(kp, self.parent)
         self.parent.remove_child(self)
         print()
