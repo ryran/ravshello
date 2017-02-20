@@ -3668,7 +3668,7 @@ class Keypairs(ConfigNode):
                 endRange=i)
             inputFile = sshPubKeys[selection]
         try:
-            with open(inputFile) as f:
+            with open(path.expanduser(inputFile)) as f:
                 pubkeyData = f.read()
         except:
             print(c.RED("Problem reading pubkey file!\n"))
