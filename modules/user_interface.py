@@ -3002,13 +3002,15 @@ class Vm(ConfigNode):
             print(c.red("Problem updating VM!\n"))
             raise
         rCache.purge_app_cache(self.appId)
-        print(c.green("VM '{}' updated!\n".format(self.vmName)))
+        print(c.green("VM '{}' updated!".format(self.vmName)))
         if self.parent.parent.confirm_app_is_published(quiet=True):
             if publishUpdates:
                 self.parent.parent.publish_design_updates()
             else:
                 print(c.yellow("\nPublish your design updates to the cloud later by running:"))
-                print(c.BOLD("    /apps/{}/ publish_design_updates".format(self.appName)))
+                print(c.BOLD("    /apps/{}/ publish_design_updates\n".format(self.appName)))
+        else:
+            print()
     
     def ui_complete_nic_edit(self, parameters, text, current_param):
         vm = rCache.get_vm(self.appId, self.vmId, aspect='design')
