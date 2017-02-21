@@ -3268,12 +3268,11 @@ class Vm(ConfigNode):
                     self.parent.parent.publish_design_updates()
                 else:
                     print(c.yellow("\nPublish your design updates to the cloud later by running:"))
-                    print(c.BOLD("    /apps/{}/ publish_design_updates".format(self.appName)))
+                    print(c.BOLD("    /apps/{}/ publish_design_updates\n".format(self.appName)))
             self.parent.remove_child(self)
             rCache.purge_app_cache(self.appId)
         else:
-            print("Leaving VM intact")
-        print()
+            print("Leaving VM intact\n")
     
     def ui_complete_delete(self, parameters, text, current_param):
         if current_param in ['noconfirm', 'publishUpdates']:
