@@ -186,13 +186,8 @@ def main():
         preRunCommands = rOpt.cfgFile.get('preRunCommands', [])
         if not isinstance(preRunCommands, list):
             c.verbose(
-                "Error: ignoring configFile `preRunCommands` directive because it's not a list, e.g.:\n"
-                "    preRunCommands: [/blueprints refresh, /users refresh, ls /apps]\n"
-                "Or:\n"
-                "    preRunCommands:\n"
-                "        - /blueprints refresh\n"
-                "        - /users refresh\n"
-                "        - ls /apps")
+                "Error: Ignoring configFile `preRunCommands` directive because it's not a list\n"
+                "  See /usr/share/{}/config.yaml for example".format(cfg.prog))
             del rOpt.cfgFile['preRunCommands']
         # Handle include files
         includes = rOpt.cfgFile.get('includes', [])
@@ -205,14 +200,8 @@ def main():
                     c.verbose("Error reading file '{}' referenced by configFile `includes` directive; ignoring".format(filepath))
         else:
             c.verbose(
-                "Error: ignoring configFile `includes` directive because it's not a list, e.g.:\n"
-                "    includes: [~/somefile]\n"
-                "Or:\n"
-                "    includes: [ /some/file, /some/other/file ]\n"
-                "Or:\n"
-                "    includes:\n"
-                "        - /some/file\n"
-                "        - /some/other/file")
+                "Error: Ignoring configFile `includes` directive because it's not a list\n"
+                "  See /usr/share/{}/config.yaml for example".format(cfg.prog))
     
     # Expand sshKeyFile var in case of tildes used; set to none if missing
     if os.path.isfile(os.path.expanduser(rOpt.cfgFile.get('sshKeyFile', ''))):

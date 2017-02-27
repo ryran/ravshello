@@ -73,3 +73,13 @@ eventsOfInterest:
 #    - cd /apps
 #    - ls
 #    - (ADD AS MANY COMMANDS AS YOU WANT)
+
+
+######
+## Optionally include additional config file(s). These must be the same format
+## as above. Keys from included config files will overwrite keys from earlier
+## files. Inclusion is not recursive (included files don't support `includes`).
+
+#includes:
+#    - ~/some/file
+#    - /another/file
