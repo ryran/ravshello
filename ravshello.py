@@ -181,6 +181,38 @@ def main():
             "Note: unable to read configFile '{}'; using defaults"
             .format(os.path.join(rOpt.userCfgDir, rOpt.cfgFileName)))
         rOpt.cfgFile = {}
+    else:
+        # Validate pre-run commands
+        preRunCommands = rOpt.cfgFile.get('preRunCommands', [])
+        if not isinstance(preRunCommands, list):
+            c.verbose(
+                "Error: ignoring configFile `preRunCommands` directive because it's not a list, e.g.:\n"
+                "    preRunCommands: [/blueprints refresh, /users refresh, ls /apps]\n"
+                "Or:\n"
+                "    preRunCommands:\n"
+                "        - /blueprints refresh\n"
+                "        - /users refresh\n"
+                "        - ls /apps")
+            del rOpt.cfgFile['preRunCommands']
+        # Handle include files
+        includes = rOpt.cfgFile.get('includes', [])
+        if isinstance(includes, list):
+            for filepath in includes:
+                try:
+                    with open(os.path.expanduser(filepath)) as f:
+                        rOpt.cfgFile.update(yaml.safe_load(f))
+                except:
+                    c.verbose("Error reading file '{}' referenced by configFile `includes` directive; ignoring".format(filepath))
+        else:
+            c.verbose(
+                "Error: ignoring configFile `includes` directive because it's not a list, e.g.:\n"
+                "    includes: [~/somefile]\n"
+                "Or:\n"
+                "    includes: [ /some/file, /some/other/file ]\n"
+                "Or:\n"
+                "    includes:\n"
+                "        - /some/file\n"
+                "        - /some/other/file")
     
     # Expand sshKeyFile var in case of tildes used; set to none if missing
     if os.path.isfile(os.path.expanduser(rOpt.cfgFile.get('sshKeyFile', ''))):
