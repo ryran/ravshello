@@ -22,6 +22,7 @@ import argparse
 import yaml
 import os
 import sys
+from glob import glob
 
 # Custom modules
 from modules import string_ops as c
@@ -45,6 +46,16 @@ class CustomFormatter(argparse.RawDescriptionHelpFormatter):
                     parts.append('%s' % option_string)
                 parts[-1] += ' %s'%args_string
             return ', '.join(parts)
+
+class Loader(yaml.Loader):
+    """From http://stackoverflow.com/a/9577670."""
+    def __init__(self, stream):
+        self._root = os.path.split(stream.name)[0]
+        super(Loader, self).__init__(stream)
+    def include(self, node):
+        filename = os.path.join(self._root, self.construct_scalar(node))
+        with open(filename, 'r') as f:
+            return yaml.load(f, Loader)
 
 def main():
     """Parse cmdline args, configure prefs, login, and start captive UI."""
@@ -171,10 +182,12 @@ def main():
     else:
         rOpt.userCfgDir = os.path.expanduser(cfg.defaultUserCfgDir)
     
+    # Add yaml custom !include handler
+    Loader.add_constructor('!include', Loader.include)
     try:
         # Read yaml config to dictionary
         with open(os.path.join(rOpt.userCfgDir, rOpt.cfgFileName)) as f:
-            rOpt.cfgFile = yaml.safe_load(f)
+            rOpt.cfgFile = yaml.load(f, Loader)
     except:
         # Create empty dict if reading config failed
         c.verbose(
@@ -192,10 +205,14 @@ def main():
         # Handle include files
         includes = rOpt.cfgFile.get('includes', [])
         if isinstance(includes, list):
+            # Handle glob-syntax
+            L = []
             for filepath in includes:
+                L.extend(glob(filepath))
+            for filepath in L:
                 try:
                     with open(os.path.expanduser(filepath)) as f:
-                        rOpt.cfgFile.update(yaml.safe_load(f))
+                        rOpt.cfgFile.update(yaml.load(f, Loader))
                 except:
                     c.verbose("Error reading file '{}' referenced by configFile `includes` directive; ignoring".format(filepath))
         else:

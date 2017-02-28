@@ -1,3 +1,10 @@
+#####
+## For explanation of YAML syntax, see https://learnxinyminutes.com/docs/yaml/
+## In addition, ravshello supports a non-standard "!include" extension, e.g.:
+##     KEY: !include /PATH/FILE
+## Such inclusions will be handled recursively so use with care.
+
+
 ######
 ## Optionally specify login credentials for Ravello account to avoid prompting
 
@@ -78,8 +85,9 @@ eventsOfInterest:
 ######
 ## Optionally include additional config file(s). These must be the same format
 ## as above. Keys from included config files will overwrite keys from earlier
-## files. Inclusion is not recursive (included files don't support `includes`).
+## files. Inclusion is not recursive (included files don't support `includes`),
+## Globbing and tilde-expansion ARE supported.
 
 #includes:
 #    - ~/some/file
-#    - /another/file
+#    - /another/dir/*
