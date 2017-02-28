@@ -208,10 +208,10 @@ def main():
             # Handle glob-syntax
             L = []
             for filepath in includes:
-                L.extend(glob(filepath))
+                L.extend(glob(os.path.expanduser(filepath)))
             for filepath in L:
                 try:
-                    with open(os.path.expanduser(filepath)) as f:
+                    with open(filepath) as f:
                         rOpt.cfgFile.update(yaml.load(f, Loader))
                 except:
                     c.verbose("Error reading file '{}' referenced by configFile `includes` directive; ignoring".format(filepath))
