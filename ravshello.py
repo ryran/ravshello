@@ -53,7 +53,9 @@ class Loader(yaml.Loader):
         self._root = os.path.split(stream.name)[0]
         super(Loader, self).__init__(stream)
     def include(self, node):
-        filename = os.path.join(self._root, self.construct_scalar(node))
+        filename = os.path.expanduser(self.construct_scalar(node))
+        if not filename.startswith('/'):
+            filename = os.path.join(self._root, filename)
         with open(filename, 'r') as f:
             return yaml.load(f, Loader)
 
