@@ -2792,7 +2792,56 @@ class Vm(ConfigNode):
             return [completions[0] + ' ']
         else:
             return completions
-
+    
+    def ui_command_cloudinit_userdata_from_file(self, inputFile, noconfirm='false',
+            publishUpdates='true'):
+        """
+        Inject Cloud-Init user-data into VM from files.
+        
+        This requires the VM has Cloud-Init installed.
+        
+        *inputFile* must be the path to a file containing cloud-config data
+        ("#cloud-config") or a shell script (e.g., "#!/bin/bash").
+        """
+        noconfirm = self.ui_eval_param(noconfirm, 'bool', False)
+        publishUpdates = self.ui_eval_param(publishUpdates, 'bool', True)
+        print()
+        if self.confirm_app_is_published(quiet=True):
+            # FIXME: We should be checking if the **VM** is published; not the app
+            print(c.red("Cloud Init cannot be modified after VM is published!\n"))
+            return
+        vm = rCache.get_vm(self.appId, self.vmId, aspect='design')
+        if vm.get('userData', None):
+            print(c.yellow("Warning: This VM is already has Cloud-Init userData in its design"))
+            if not noconfirm:
+                response = raw_input(c.CYAN("Continue with overwriting userData? [y/N] "))
+                print()
+                if response != 'y':
+                    print("Leaving existing VM userData intact\n")
+                    return
+        try:
+            with open(path.expanduser(inputFile)) as f:
+                userData = f.read()
+        except:
+            print(c.RED("Problem reading inputFile '{}'!\n".format(inputFile)))
+            raise
+        vm['supportsCloudInit'] = True
+        vm['userData'] = userData
+        self.update_vm(vm, publishUpdates)
+    
+    def ui_complete_cloudinit_userdata_from_file(self, parameters, text, current_param):
+        if current_param == 'inputFile':
+            return _complete_path(text)
+        elif current_param in ['noconfirm', 'publishUpdates']:
+            completions = [a for a in ['false', 'true']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
+    
     def ui_command_nic_edit(self, index='@prompt', name='@current', mac='@current',
             deviceType='@current', bootProto='@current', ip='@current', mask='@current',
             gateway='@current', dns='@current', externalAccessState='@current',
