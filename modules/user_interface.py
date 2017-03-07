@@ -1257,13 +1257,22 @@ class Bp(ConfigNode):
         else:
             return completions
     
-    def ui_command_find_pub_locations(self):
+    def ui_command_find_pub_locations(self, outputFile='@EDITOR'):
         """
         Print details about available publish locations for a blueprint.
+        
+        Optionally specify *outputFile* as @term or @pager or as a relative /
+        absolute path on the local system (tab-completion available). Default
+        value of '@EDITOR' checks environment for a RAVSH_EDITOR variable, and
+        failing that, EDITOR, and failing that, it falls back to gvim, then
+        vim, then less.
         """
         print()
-        pager("Blueprint available publish locations for '{}'\n".format(self.bpName) +
-              ui.prettify_json(rClient.get_blueprint_publish_locations(self.bpId)))
+        outputFile = self.ui_eval_param(outputFile, 'string', '@EDITOR')
+        bpPath = "/blueprints/{}".format(self.bpName)
+        description = "BP available publish locations for {}".format(bpPath)
+        ui.print_obj(rClient.get_blueprint_publish_locations(self.bpId),
+            description, outputFile, tmpPrefix='publoc_{}'.format(self.bpName))
     
     def ui_command_print_def(self, outputFile='@EDITOR'):
         """
