@@ -1269,8 +1269,7 @@ class Bp(ConfigNode):
         """
         print()
         outputFile = self.ui_eval_param(outputFile, 'string', '@EDITOR')
-        bpPath = "/blueprints/{}".format(self.bpName)
-        description = "BP available publish locations for {}".format(bpPath)
+        description = "BP available publish locations for /blueprints/{}".format(self.bpName)
         ui.print_obj(rClient.get_blueprint_publish_locations(self.bpId),
             description, outputFile, tmpPrefix='publoc_{}'.format(self.bpName))
     
@@ -1635,9 +1634,10 @@ class Applications(ConfigNode):
                     completions = [a for a in L
                                    if a.startswith(text)]
                 else:
-                    pubLocations = rClient.get_blueprint_publish_locations(bpid)
+                    pubLocations = [loc for loc in rClient.get_blueprint_publish_locations(bpid)
+                                        if not loc['deprecated']]
                     for p in pubLocations:
-                        L.append(p['regionName'])
+                        L.append(p['regionDisplayName'].replace(" ", "-"))
                     completions = [a for a in L
                                    if a.startswith(text)]
         else:
@@ -1675,7 +1675,7 @@ class App(ConfigNode):
         except:
             note = ""
         if app['published']:
-            region = app['deployment']['regionId']
+            region = app['deployment']['regionName'].replace(" ", "-")
             totalErrorVms = app['deployment']['totalErrorVms']
             appState = ravello_sdk.application_state(app)
             if isinstance(appState, list):
@@ -1911,7 +1911,7 @@ class App(ConfigNode):
         else:
             autoStopMessage = c.BOLD("never had auto-stop set")
         # Print our header message
-        region = app['deployment']['regionId']
+        region = app['deployment']['regionName'].replace(" ", "-")
         print(c.BOLD("App VMs in region {} {}".format(region, autoStopMessage)))
         print()
         for vm in app['deployment']['vms']:
@@ -2105,6 +2105,22 @@ class App(ConfigNode):
             completions = []
         return completions
     
+    def ui_command_find_pub_locations(self, outputFile='@EDITOR'):
+        """
+        Print details about available publish locations for an app.
+        
+        Optionally specify *outputFile* as @term or @pager or as a relative /
+        absolute path on the local system (tab-completion available). Default
+        value of '@EDITOR' checks environment for a RAVSH_EDITOR variable, and
+        failing that, EDITOR, and failing that, it falls back to gvim, then
+        vim, then less.
+        """
+        print()
+        outputFile = self.ui_eval_param(outputFile, 'string', '@EDITOR')
+        description = "APP available publish locations for /apps/{}".format(self.appName)
+        ui.print_obj(rClient.get_application_publish_locations(self.appId),
+            description, outputFile, tmpPrefix='publoc_{}'.format(self.appName))
+    
     def delete_app(self):
         if self.confirm_app_is_published(quiet=True):
             published = True
@@ -2199,19 +2215,23 @@ class App(ConfigNode):
                 print(c.BOLD("    /apps/{}/ start\n".format(self.appName)))
                 return
         # Choosing time
-        pubLocations = rClient.get_application_publish_locations(self.appId)
+        pubLocations = [loc for loc in rClient.get_application_publish_locations(self.appId)
+                            if not loc['deprecated']]
+        # Replace spaces in displayName with dashes
+        for loc in pubLocations:
+            loc['regionDisplayName'] = loc['regionDisplayName'].replace(" ", "-")
         # Somewhat ironically, we only add cost-optimized option for admins
         if is_admin():
-            pubLocations.insert(0, {'regionName': "@auto", 'regionDisplayName': "auto-select cheapest"})
+            pubLocations.insert(0, {'regionName': "@auto", 'regionDisplayName': "@auto"})
         if region == '@prompt':
             print(c.BOLD("\nAvailable publish locations:"))
             for i, loc in enumerate(pubLocations):
-                print("  {})  {}".format(c.cyan(i), loc['regionName']))
+                print("  {})  {}".format(c.cyan(i), loc['regionDisplayName']))
             # Prompt for provider selection
             selection = ui.prompt_for_number(
                 c.CYAN("\nSelect cloud region in which to provision your VMs by entering a number: "),
                 endRange=i)
-            if '@auto' in pubLocations[selection]['regionName']:
+            if '@auto' in pubLocations[selection]['regionDisplayName']:
                 optimizationLevel = 'COST_OPTIMIZED'
             else:
                 optimizationLevel = 'PERFORMANCE_OPTIMIZED'
@@ -2220,7 +2240,7 @@ class App(ConfigNode):
             optimizationLevel = 'COST_OPTIMIZED'
         else:
             for i, loc in enumerate(pubLocations):
-                if region == loc['regionName']:
+                if region in [loc['regionName'], loc['regionDisplayName']]:
                     optimizationLevel = 'PERFORMANCE_OPTIMIZED'
                     preferredRegion = loc['regionName']
                     break
@@ -2250,9 +2270,10 @@ class App(ConfigNode):
     def ui_complete_publish(self, parameters, text, current_param):
         if current_param == 'region':
             L = ['@prompt', '@auto']
-            pubLocations = rClient.get_application_publish_locations(self.appId)
+            pubLocations = [loc for loc in rClient.get_application_publish_locations(self.appId)
+                                if not loc['deprecated']]
             for p in pubLocations:
-                L.append(p['regionName'])
+                L.append(p['regionDisplayName'].replace(" ", "-"))
             completions = [a for a in L
                            if a.startswith(text)]
         elif current_param in ['startAllVms', 'loopQueryStatus']:
