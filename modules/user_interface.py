@@ -177,7 +177,7 @@ def main():
     # List of commands to run before entering interactive shell
     cmds = []
     # If have preRunCommands from config file, use them to start our list of things to run
-    cmds.extend(rOpt.cfgFile.get('preRunCommands', []))
+    cmds.extend(cfg.cfgFile.get('preRunCommands', []))
     # If have cmdline args, add them to list of things to run
     cmds.extend(rOpt.cmdlineArgs)
     # Run
@@ -1883,8 +1883,8 @@ class App(ConfigNode):
         allVmsAreStarted = True
         allVmsAreStopped = True
         sshKey = ""
-        if rOpt.cfgFile['sshKeyFile']:
-            sshKey = " -i {}".format(rOpt.cfgFile['sshKeyFile'])
+        if cfg.cfgFile['sshKeyFile']:
+            sshKey = " -i {}".format(cfg.cfgFile['sshKeyFile'])
         try:
             expirationTime = ui.sanitize_timestamp(app['deployment']['expirationTime'])
         except:
@@ -2520,8 +2520,8 @@ class Vm(ConfigNode):
         if not (vm.has_key('networkConnections') or vm.has_key('suppliedServices')):
             return None
         sshKey = ""
-        if rOpt.cfgFile['sshKeyFile']:
-            sshKey = rOpt.cfgFile['sshKeyFile']
+        if cfg.cfgFile['sshKeyFile']:
+            sshKey = cfg.cfgFile['sshKeyFile']
         for nic in vm['networkConnections']:
             fqdn = nic['ipConfig'].get('fqdn', "")
             for svc in vm['suppliedServices']:

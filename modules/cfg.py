@@ -6,7 +6,7 @@
 prog = 'ravshello'
 
 # Version info
-__version__ = '1.20.0'
+__version__ = '1.21.0'
 __date__    = '2017/03/07'
 version = "{} v{} last mod {}".format(prog, __version__, __date__)
 
@@ -39,3 +39,6 @@ rClient = None
 
 # This will hold the RavelloCache object
 rCache = None
+
+# This will hold the options read from config files
+cfgFile = {}

@@ -12,9 +12,9 @@ from . import string_ops as c
 from . import cfg
 
 def authorize_user():
-    cfgUser = cfg.opts.cfgFile.get('ravelloUser', None)
-    cfgNick = cfg.opts.cfgFile.get('nickname', None)
-    profiles = cfg.opts.cfgFile.get('userProfiles', {})
+    cfgUser = cfg.cfgFile.get('ravelloUser', None)
+    cfgNick = cfg.cfgFile.get('nickname', None)
+    profiles = cfg.cfgFile.get('userProfiles', {})
     c.verbose("\nDetermining nickname . . .")
     c.verbose("  (Nickname will be prepended to names of any apps you create)")
     c.verbose("  (Nickname will be used to restrict which app names you can see)")

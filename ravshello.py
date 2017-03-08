@@ -29,6 +29,7 @@ from modules import string_ops as c
 from modules import ravello_cache
 from modules import auth_local, auth_ravello, user_interface, cfg
 
+
 class CustomFormatter(argparse.RawDescriptionHelpFormatter):
     """This custom formatter eliminates the duplicate metavar in help lines."""
     def _format_action_invocation(self, action):
@@ -47,6 +48,7 @@ class CustomFormatter(argparse.RawDescriptionHelpFormatter):
                 parts[-1] += ' %s'%args_string
             return ', '.join(parts)
 
+
 class Loader(yaml.Loader):
     """From http://stackoverflow.com/a/9577670."""
     def __init__(self, stream):
@@ -58,6 +60,32 @@ class Loader(yaml.Loader):
             filename = os.path.join(self._root, filename)
         with open(filename, 'r') as f:
             return yaml.load(f, Loader)
+
+# Add yaml custom !include handler
+Loader.add_constructor('!include', Loader.include)
+
+
+def apply_config_file(filepath):
+    """Update cfgFile dict w/yaml config file, ignoring missing files."""
+    try:
+        with open(filepath) as f:
+            cfg.cfgFile.update(yaml.load(f, Loader))
+    except IOError as e:
+        if e.strerror == 'No such file or directory':
+            pass
+        else:
+            print(c.yellow("Ignoring config file '{}'; IOError: {}"
+                .format(filepath, e.strerror)))
+    except TypeError as e:
+        if e.message == "'NoneType' object is not iterable":
+            # This means it's an empty config file
+            pass
+        else:
+            raise
+    except:
+        print(c.red("Fatal error parsing config file '{}'\n".format(filepath)))
+        raise
+
 
 def main():
     """Parse cmdline args, configure prefs, login, and start captive UI."""
@@ -118,12 +146,15 @@ def main():
               "(default: '{}')".format(cfg.defaultUserCfgDir)))
     grpU.add_argument('--cfgfile', dest='cfgFileName', metavar='CFGFILE',
         default=cfg.defaultUserCfgFile,
-        help=("Explicitly specify basename of optional yaml config file "
-              "containing login credentials, etc (default: '{}')"
-              .format(cfg.defaultUserCfgFile)))
+        help=("Explicitly specify basename of optional per-user yaml config file "
+              "containing login credentials & other settings (default: '{default}'); "
+              "note that this will be created in CFGDIR; also note that this "
+              "file will be read AFTER /usr/share/{prog}/config.yaml & "
+              "/etc/{prog}/config.yaml"
+              .format(default=cfg.defaultUserCfgFile, prog=cfg.prog)))
     grpU.add_argument(
         '--clearprefs', dest='clearPreferences', action='store_true',
-        help="Delete prefs.bin in user config directory before starting")
+        help="Delete prefs.bin in per-user CFGDIR before starting")
     grpU.add_argument(
         '-q', '--quiet', dest='enableVerbose', action='store_false',
         help="Hide verbose messages during startup")
@@ -184,50 +215,40 @@ def main():
     else:
         rOpt.userCfgDir = os.path.expanduser(cfg.defaultUserCfgDir)
     
-    # Add yaml custom !include handler
-    Loader.add_constructor('!include', Loader.include)
-    try:
-        # Read yaml config to dictionary
-        with open(os.path.join(rOpt.userCfgDir, rOpt.cfgFileName)) as f:
-            rOpt.cfgFile = yaml.load(f, Loader)
-    except:
-        # Create empty dict if reading config failed
-        c.verbose(
-            "Note: unable to read configFile '{}'; using defaults"
-            .format(os.path.join(rOpt.userCfgDir, rOpt.cfgFileName)))
-        rOpt.cfgFile = {}
-    else:
+    # Read package config file
+    apply_config_file('/usr/share/{}/config.yaml'.format(cfg.prog))
+    # Read system config file
+    apply_config_file('/etc/{}/config.yaml'.format(cfg.prog))
+    # Read user config file
+    apply_config_file(os.path.join(rOpt.userCfgDir, rOpt.cfgFileName))
+    # Do some checking of cfgfile options
+    if cfg.cfgFile:
         # Validate pre-run commands
-        preRunCommands = rOpt.cfgFile.get('preRunCommands', [])
+        preRunCommands = cfg.cfgFile.get('preRunCommands', [])
         if not isinstance(preRunCommands, list):
-            c.verbose(
+            print(c.yellow(
                 "Error: Ignoring configFile `preRunCommands` directive because it's not a list\n"
-                "  See /usr/share/{}/config.yaml for example".format(cfg.prog))
-            del rOpt.cfgFile['preRunCommands']
+                "  See /usr/share/{}/config.yaml for example".format(cfg.prog)))
+            del cfg.cfgFile['preRunCommands']
         # Handle include files
-        includes = rOpt.cfgFile.get('includes', [])
+        includes = cfg.cfgFile.get('includes', [])
         if isinstance(includes, list):
             # Handle glob-syntax
             L = []
             for filepath in includes:
                 L.extend(glob(os.path.expanduser(filepath)))
             for filepath in L:
-                try:
-                    with open(filepath) as f:
-                        rOpt.cfgFile.update(yaml.load(f, Loader))
-                except:
-                    c.verbose("Error reading file '{}' referenced by configFile `includes` directive; ignoring".format(filepath))
+                apply_config_file(filepath)
         else:
-            c.verbose(
+            print(c.yellow(
                 "Error: Ignoring configFile `includes` directive because it's not a list\n"
-                "  See /usr/share/{}/config.yaml for example".format(cfg.prog))
+                "  See /usr/share/{}/config.yaml for example".format(cfg.prog)))
     
     # Expand sshKeyFile var in case of tildes used; set to none if missing
-    if os.path.isfile(os.path.expanduser(rOpt.cfgFile.get('sshKeyFile', ''))):
-        rOpt.cfgFile['sshKeyFile'] = os.path.expanduser(
-            rOpt.cfgFile['sshKeyFile'])
+    if os.path.isfile(os.path.expanduser(cfg.cfgFile.get('sshKeyFile', ''))):
+        cfg.cfgFile['sshKeyFile'] = os.path.expanduser(cfg.cfgFile['sshKeyFile'])
     else:
-        rOpt.cfgFile['sshKeyFile'] = None
+        cfg.cfgFile['sshKeyFile'] = None
     
     print(c.BOLD("Welcome to {}!".format(cfg.prog)))
     

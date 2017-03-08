@@ -48,10 +48,10 @@ def login():
     # Create client object
     rClient = ravello_sdk.RavelloClient()
     c.verbose("\nConnecting to Ravello . . .")
-    cfgUser = rOpt.cfgFile.get('ravelloUser', None)
-    cfgPass = rOpt.cfgFile.get('ravelloPass', None)
-    cfgMesg = rOpt.cfgFile.get('unableToLoginAdditionalMsg', None)
-    profiles = rOpt.cfgFile.get('userProfiles', {})
+    cfgUser = cfg.cfgFile.get('ravelloUser', None)
+    cfgPass = cfg.cfgFile.get('ravelloPass', None)
+    cfgMesg = cfg.cfgFile.get('unableToLoginAdditionalMsg', None)
+    profiles = cfg.cfgFile.get('userProfiles', {})
     user = passwd = userFrom = profile = None
     # If necessary, get Ravello *username* from configfile or prompt
     try:
