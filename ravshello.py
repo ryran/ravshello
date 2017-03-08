@@ -244,11 +244,8 @@ def main():
                 "Error: Ignoring configFile `includes` directive because it's not a list\n"
                 "  See /usr/share/{}/config.yaml for example".format(cfg.prog)))
     
-    # Expand sshKeyFile var in case of tildes used; set to none if missing
-    if os.path.isfile(os.path.expanduser(cfg.cfgFile.get('sshKeyFile', ''))):
-        cfg.cfgFile['sshKeyFile'] = os.path.expanduser(cfg.cfgFile['sshKeyFile'])
-    else:
-        cfg.cfgFile['sshKeyFile'] = None
+    # Set sshKeyFile var to none if missing
+    cfg.cfgFile['sshKeyFile'] = cfg.cfgFile.get('sshKeyFile', None)
     
     print(c.BOLD("Welcome to {}!".format(cfg.prog)))
     
