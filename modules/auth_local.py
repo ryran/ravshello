@@ -6,6 +6,7 @@
 from __future__ import print_function
 import pwd
 import os
+from sys import stderr
 
 # Custom modules
 from . import string_ops as c
@@ -15,9 +16,9 @@ def authorize_user():
     cfgUser = cfg.cfgFile.get('ravelloUser', None)
     cfgNick = cfg.cfgFile.get('nickname', None)
     profiles = cfg.cfgFile.get('userProfiles', {})
-    c.verbose("\nDetermining nickname . . .")
-    c.verbose("  (Nickname will be prepended to names of any apps you create)")
-    c.verbose("  (Nickname will be used to restrict which app names you can see)")
+    c.verbose("\nDetermining nickname . . .", file=stderr)
+    c.verbose("  (Nickname will be prepended to names of any apps you create)", file=stderr)
+    c.verbose("  (Nickname will be used to restrict which app names you can see)", file=stderr)
     nick = None
     try:
         nick = profiles[cfg.opts.ravelloUser]['nickname']
@@ -31,21 +32,21 @@ def authorize_user():
         nick = raw_input(c.CYAN("  Enter nickname: "))
         user = c.replace_bad_chars_with_underscores(nick)
         if nick != user:
-            print(c.yellow("    Invalid characters replaced w/underscores"))
-        print(c.GREEN("  Using input '{}' for nickname".format(user)))
+            print(c.yellow("    Invalid characters replaced w/underscores"), file=stderr)
+        print(c.GREEN("  Using input '{}' for nickname".format(user)), file=stderr)
     elif cfg.opts.nick is not None:
         nick = cfg.opts.nick
         user = c.replace_bad_chars_with_underscores(nick)
         if nick != user:
-            print(c.yellow("    Invalid characters replaced w/underscores"))
-        print(c.GREEN("  Using cmdline arg '{}' for nickname".format(user)))
+            print(c.yellow("    Invalid characters replaced w/underscores"), file=stderr)
+        print(c.GREEN("  Using cmdline arg '{}' for nickname".format(user)), file=stderr)
     elif nick is not None:
         user = nick
-        print(c.GREEN("  Using profile-specified '{}' for nickname".format(user)))
+        print(c.GREEN("  Using profile-specified '{}' for nickname".format(user)), file=stderr)
     elif cfgNick is not None:
         user = cfgNick
-        print(c.GREEN("  Using configfile-specified '{}' for nickname".format(user)))
+        print(c.GREEN("  Using configfile-specified '{}' for nickname".format(user)), file=stderr)
     else:
         user = pwd.getpwuid(os.getuid()).pw_name
-        print(c.GREEN("  Using system user '{}' for nickname".format(user)))
+        print(c.GREEN("  Using system user '{}' for nickname".format(user)), file=stderr)
     return user

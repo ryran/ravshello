@@ -21,7 +21,7 @@ from __future__ import print_function
 import argparse
 import yaml
 import os
-import sys
+from sys import exit, stderr
 from glob import glob
 
 # Custom modules
@@ -75,7 +75,7 @@ def apply_config_file(filepath):
             pass
         else:
             print(c.yellow("Ignoring config file '{}'; IOError: {}"
-                .format(filepath, e.strerror)))
+                .format(filepath, e.strerror)), file=stderr)
     except TypeError as e:
         if e.message == "'NoneType' object is not iterable":
             # This means it's an empty config file
@@ -83,7 +83,8 @@ def apply_config_file(filepath):
         else:
             raise
     except:
-        print(c.red("Fatal error parsing config file '{}'\n".format(filepath)))
+        print(c.red("Fatal error parsing config file '{}'\n"
+            .format(filepath)), file=stderr)
         raise
 
 
@@ -199,7 +200,7 @@ def main():
     # Halp-quit
     if rOpt.showHelp:
         p.print_help()
-        sys.exit()
+        exit()
     
     # Setup color/verbosity
     c.enableColor = rOpt.enableColor
@@ -228,7 +229,7 @@ def main():
         if not isinstance(preRunCommands, list):
             print(c.yellow(
                 "Error: Ignoring configFile `preRunCommands` directive because it's not a list\n"
-                "  See /usr/share/{}/config.yaml for example".format(cfg.prog)))
+                "  See /usr/share/{}/config.yaml for example".format(cfg.prog)), file=stderr)
             del cfg.cfgFile['preRunCommands']
         # Handle include files
         includes = cfg.cfgFile.get('includes', [])
@@ -242,12 +243,12 @@ def main():
         else:
             print(c.yellow(
                 "Error: Ignoring configFile `includes` directive because it's not a list\n"
-                "  See /usr/share/{}/config.yaml for example".format(cfg.prog)))
+                "  See /usr/share/{}/config.yaml for example".format(cfg.prog)), file=stderr)
     
     # Set sshKeyFile var to none if missing
     cfg.cfgFile['sshKeyFile'] = cfg.cfgFile.get('sshKeyFile', None)
     
-    print(c.BOLD("Welcome to {}!".format(cfg.prog)))
+    print(c.BOLD("Welcome to {}!".format(cfg.prog)), file=stderr)
     
     # Liftoff
     # 1.) Establish a local user name to use in ravshello
@@ -271,5 +272,5 @@ if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
-        print()
-        sys.exit()
+        print(file=stderr)
+        exit()
