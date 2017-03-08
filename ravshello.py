@@ -21,7 +21,7 @@ from __future__ import print_function
 import argparse
 import yaml
 import os
-import sys
+from sys import exit, stderr
 from glob import glob
 
 # Custom modules
@@ -75,7 +75,7 @@ def apply_config_file(filepath):
             pass
         else:
             print(c.yellow("Ignoring config file '{}'; IOError: {}"
-                .format(filepath, e.strerror)))
+                .format(filepath, e.strerror)), file=stderr)
     except TypeError as e:
         if e.message == "'NoneType' object is not iterable":
             # This means it's an empty config file
@@ -83,7 +83,8 @@ def apply_config_file(filepath):
         else:
             raise
     except:
-        print(c.red("Fatal error parsing config file '{}'\n".format(filepath)))
+        print(c.red("Fatal error parsing config file '{}'\n"
+            .format(filepath)), file=stderr)
         raise
 
 
@@ -162,7 +163,13 @@ def main():
         '-d', '--debug', dest='enableDebugging', action='store_true',
         help=("Turn on debugging features to help troubleshoot a problem "
               "(critically, this disables some ConfigShell exception-handling "
-              "so that errors in commands will cause {} to exit"
+              "so that errors in commands will cause {} to exit)"
+              .format(cfg.prog)))
+    grpU.add_argument(
+        '-D', '--directsdk', action='store_true',
+        help=("Replaces the standard {} interface with a shell that provides "
+              "direct access to the Ravello SDK (note that this shell respects "
+              "the --stdin & --scripts options, as well as any cmdline args)"
               .format(cfg.prog)))
     grpU.add_argument(
         '-V', '--version', action='version', version=cfg.version)
@@ -178,20 +185,20 @@ def main():
     grpA_0 = grpA.add_mutually_exclusive_group()
     grpA_0.add_argument(
         '-0', '--stdin', dest='useStdin', action='store_true',
-        help=("Enable reading newline-delimited ravshello commands from stdin "
+        help=("Enable reading newline-delimited commands from stdin "
               "(these commands will be executed instead of entering the "
               "interactive shell -- automatic exit after last cmd)"))
     grpA_0.add_argument(
         '-s', '--script', dest='scriptFile', metavar='FILE',
-        help=("Specify a script file containing newline-delimited ravshello "
+        help=("Specify a script file containing newline-delimited "
               "commands (these commands will be executed instead of entering "
               "the interactive shell -- automatic exit after last cmd)"))
     grpA.add_argument(
         'cmdlineArgs', metavar='COMMANDS', nargs=argparse.REMAINDER,
         help=("If any additional cmdline args are present, each shell word "
-              "will be treated as a separate ravshello command and they will "
-              "all be executed prior to entering the interactive shell "
-              "(ensure each cmd is quoted to protect from shell expansion!)"))
+              "will be treated as a separate command and they will all be "
+              "executed prior to entering the interactive shell (ensure "
+              "each cmd is quoted to protect from shell expansion!)"))
     
     # Build out options namespace
     cfg.opts = rOpt = p.parse_args()
@@ -199,7 +206,7 @@ def main():
     # Halp-quit
     if rOpt.showHelp:
         p.print_help()
-        sys.exit()
+        exit()
     
     # Setup color/verbosity
     c.enableColor = rOpt.enableColor
@@ -208,6 +215,12 @@ def main():
     # Trigger -a if -A was called
     if rOpt.showAllApps:
         rOpt.enableAdminFuncs = True
+    
+    # Print warnings about incompatible options
+    if rOpt.useStdin and rOpt.cmdlineArgs:
+        print(c.yellow("Ignoring cmdline-args because -0/--stdin was requested"), file=stderr)
+    elif rOpt.scriptFile and rOpt.cmdlineArgs:
+        print(c.yellow("Ignoring cmdline-args because -s/--script was requested"), file=stderr)
     
     # Expand userCfgDir in case of tildes; set to default if missing specified dir
     if os.path.isdir(os.path.expanduser(rOpt.userCfgDir)):
@@ -228,7 +241,7 @@ def main():
         if not isinstance(preRunCommands, list):
             print(c.yellow(
                 "Error: Ignoring configFile `preRunCommands` directive because it's not a list\n"
-                "  See /usr/share/{}/config.yaml for example".format(cfg.prog)))
+                "  See /usr/share/{}/config.yaml for example".format(cfg.prog)), file=stderr)
             del cfg.cfgFile['preRunCommands']
         # Handle include files
         includes = cfg.cfgFile.get('includes', [])
@@ -242,12 +255,12 @@ def main():
         else:
             print(c.yellow(
                 "Error: Ignoring configFile `includes` directive because it's not a list\n"
-                "  See /usr/share/{}/config.yaml for example".format(cfg.prog)))
+                "  See /usr/share/{}/config.yaml for example".format(cfg.prog)), file=stderr)
     
     # Set sshKeyFile var to none if missing
     cfg.cfgFile['sshKeyFile'] = cfg.cfgFile.get('sshKeyFile', None)
     
-    print(c.BOLD("Welcome to {}!".format(cfg.prog)))
+    print(c.BOLD("Welcome to {}!".format(cfg.prog)), file=stderr)
     
     # Liftoff
     # 1.) Establish a local user name to use in ravshello
@@ -262,14 +275,18 @@ def main():
     cfg.rClient = auth_ravello.login()
     cfg.rCache = ravello_cache.RavelloCache(cfg.rClient)
     
-    # 3.) Launch the main configShell user interface
-    #     It will read options and objects from the cfg module
-    user_interface.main()
+    if rOpt.directsdk:
+        # 3a.) Launch directsdk shell if requested
+        user_interface.launch_directsdk_shell()
+    else:
+        # 3b.) Otherwise, launch main configShell user interface
+        #      It will read options and objects from the cfg module
+        user_interface.main()
 
 
 if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
-        print()
-        sys.exit()
+        print(file=stderr)
+        exit()

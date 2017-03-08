@@ -5,7 +5,7 @@
 # Modules from standard library
 from __future__ import print_function
 from getpass import getpass
-import sys
+from sys import exit, stderr
 
 # Custom modules
 from . import string_ops as c
@@ -47,7 +47,7 @@ def login():
     rOpt = cfg.opts
     # Create client object
     rClient = ravello_sdk.RavelloClient()
-    c.verbose("\nConnecting to Ravello . . .")
+    c.verbose("\nConnecting to Ravello . . .", file=stderr)
     cfgUser = cfg.cfgFile.get('ravelloUser', None)
     cfgPass = cfg.cfgFile.get('ravelloPass', None)
     cfgMesg = cfg.cfgFile.get('unableToLoginAdditionalMsg', None)
@@ -89,18 +89,18 @@ def login():
     try:
         rClient.login(rOpt.ravelloUser, rOpt.ravelloPass)
     except:
-        print(c.RED("  Logging in to Ravello failed!"))
+        print(c.RED("  Logging in to Ravello failed!"), file=stderr)
         print("\nIf you're sure your Ravello credentials are correct, "
-              "try updating ravshello")
-        if cfgMesg: print(cfgMesg)
-        sys.exit(5)
-    print(c.GREEN("  Logged in to Ravello as "), end='')
+              "try updating ravshello", file=stderr)
+        if cfgMesg: print(cfgMesg, file=stderr)
+        exit(5)
+    print(c.GREEN("  Logged in to Ravello as "), end='', file=stderr)
     if rOpt.enableAdminFuncs:
-        print(c.YELLOW("ADMIN"), end="")
+        print(c.YELLOW("ADMIN"), end="", file=stderr)
         if rOpt.showAllApps:
-            print(" " + c.bgRED("[global app visiblity]"))
+            print(" " + c.bgRED("[global app visiblity]"), file=stderr)
         else:
-            print()
+            print(file=stderr)
     else:
-        print(c.GREEN("LEARNER"))
+        print(c.GREEN("LEARNER"), file=stderr)
     return rClient

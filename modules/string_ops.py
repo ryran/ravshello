@@ -26,15 +26,15 @@ def replace_bad_chars_with_underscores(string,
     """Perform some simple character substitution on *string*."""
     return sub(pattern, repl, string, count)
 
-def debug(message, end='\n'):
+def debug(message, end='\n', file=stdout):
     """Print *message* in blue only if enableDebug is True."""
     if enableDebug:
-        print(blue(message), end=end)
+        print(blue(message), end=end, file=file)
 
-def verbose(message, end='\n'):
+def verbose(message, end='\n', file=stdout):
     """Print *message* in magenta only if enableVerbose is True."""
     if enableVerbose:
-        print(magenta(message), end=end)
+        print(magenta(message), end=end, file=file)
 
 def REVERSE(txt):
     """Return text in reverse (& bolded)."""

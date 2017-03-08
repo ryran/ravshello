@@ -4,7 +4,7 @@
 
 # Modules from standard library
 from __future__ import print_function
-from sys import stdout, stdin
+from sys import stdout, stdin, stderr
 from pydoc import pager, pipepager
 from time import sleep, time
 from stat import S_ISDIR
@@ -48,7 +48,7 @@ except:
 rOpt = user = appnamePrefix = rClient = rCache = rootNode = None
 
 def is_admin():
-    if rOpt.enableAdminFuncs:
+    if cfg.opts.enableAdminFuncs:
         return True
     else:
         return False
@@ -88,6 +88,51 @@ def get_num_learner_active_vms(learner):
             except:
                 pass
     return activeVms
+
+
+def launch_directsdk_shell():
+    if not is_admin():
+        if cfg.opts.cmdlineArgs or cfg.opts.scriptFile or cfg.opts.useStdin:
+            print(c.red(
+                "Sorry! Only admins are allowed to use {} non-interactively\n"
+                .format(cfg.prog)))
+            return
+    def p(jsonInput):
+        print(json.dumps(jsonInput, indent=4))
+    def P(jsonInput):
+        pager(json.dumps(jsonInput, indent=4))
+    import readline, code
+    from textwrap import dedent
+    rClient = r = cfg.rClient
+    rCache = R = cfg.rCache
+    vars = globals().copy()
+    vars.update(locals())
+    print(dedent("""
+        This is a python shell to provide direct access to the Ravello SDK
+        See SDK @ https://github.com/ravello/python-sdk/blob/master/lib/ravello_sdk.py
+        Objects available for your use:
+          r = rClient = ravello_sdk.RavelloClient()
+          R = rCache = ravello_cache.RavelloCache()
+          c = string_ops
+          p(): print(json.dumps(jsonInput, indent=4))
+          P(): pager(json.dumps(jsonInput, indent=4))"""), file=stderr)
+    cmds = cfg.opts.cmdlineArgs
+    if cfg.opts.useStdin:
+        cmds = stdin.readlines()
+    elif cfg.opts.scriptFile:
+        cmds = open(cfg.opts.scriptFile).readlines()
+    shell = code.InteractiveConsole(vars)
+    if cmds:
+        print(file=stderr)
+        for cmd in [line.rstrip('\n') for line in cmds]:
+            if cfg.opts.enableDebugging:
+                c.debug("Running python line: {}".format(cmd), file=stderr)
+            shell.push(cmd)
+        shell.push("")
+    if cfg.opts.useStdin or cfg.opts.scriptFile:
+        shell.push('exit()')
+    else:
+        shell.interact("")
 
 
 def main():
@@ -164,14 +209,10 @@ def main():
         return
     if rOpt.useStdin:
         # If stdin was requested, read that in favor of anything else and then exit
-        if rOpt.scriptFile or rOpt.cmdlineArgs:
-            print(c.yellow("Ignoring script-file/cmdline-args because -0/--stdin was requested\n"))
         shell.run_stdin(exit_on_error=rOpt.enableDebugging)
         return
     if rOpt.scriptFile:
         # If script was requested, read that in favor of cmdline args and then exit
-        if rOpt.cmdlineArgs:
-            print(c.yellow("Ignoring cmdline-args because -s/--script was requested\n"))
         shell.run_script(rOpt.scriptFile, exit_on_error=rOpt.enableDebugging)
         return
     # List of commands to run before entering interactive shell
