@@ -193,7 +193,7 @@ def main():
              │ COMMANDS: Use tab-completion to see commands specific to each directory
              │ GET HELP: Use `{}`
              │
-             │ Your first time?"
+             │ Your first time?
              │   - First: use `{}` command
              │   - Next: press TAB-TAB to see available commands
              │   - Next: use `{}` TAB-TAB command to get started
