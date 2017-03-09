@@ -216,6 +216,14 @@ def main():
     if rOpt.showAllApps:
         rOpt.enableAdminFuncs = True
     
+    if not rOpt.enableAdminFuncs:
+        if rOpt.cmdlineArgs or rOpt.scriptFile or rOpt.useStdin:
+            print(c.red("Sorry! Only admins are allowed to use {} non-interactively".format(cfg.prog)), file=stderr)
+            exit(1)
+        if rOpt.directsdk:
+            print(c.red("Sorry! Only admins are allowed to use the direct SDK shell!"), file=stderr)
+            exit(1)
+    
     # Print warnings about incompatible options
     if rOpt.useStdin and rOpt.cmdlineArgs:
         print(c.yellow("Ignoring cmdline-args because -0/--stdin was requested"), file=stderr)
@@ -275,13 +283,9 @@ def main():
     cfg.rClient = auth_ravello.login()
     cfg.rCache = ravello_cache.RavelloCache(cfg.rClient)
     
-    if rOpt.directsdk:
-        # 3a.) Launch directsdk shell if requested
-        user_interface.launch_directsdk_shell()
-    else:
-        # 3b.) Otherwise, launch main configShell user interface
-        #      It will read options and objects from the cfg module
-        user_interface.main()
+    # 3.) Launch main configShell user interface
+    #     It will read options and objects from the cfg module
+    user_interface.main()
 
 
 if __name__ == '__main__':

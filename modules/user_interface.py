@@ -13,6 +13,7 @@ from glob import glob
 from datetime import datetime, date
 from calendar import month_name
 from operator import itemgetter
+from textwrap import dedent
 import json
 import subprocess
 import termios
@@ -90,21 +91,14 @@ def get_num_learner_active_vms(learner):
     return activeVms
 
 
-def launch_directsdk_shell():
-    if not is_admin():
-        if cfg.opts.cmdlineArgs or cfg.opts.scriptFile or cfg.opts.useStdin:
-            print(c.red(
-                "Sorry! Only admins are allowed to use {} non-interactively\n"
-                .format(cfg.prog)))
-            return
+def launch_directsdk_shell(scriptFile=None, allowScriptedInput=True):
     def p(jsonInput):
         print(json.dumps(jsonInput, indent=4))
     def P(jsonInput):
         pager(json.dumps(jsonInput, indent=4))
     import readline, code
-    from textwrap import dedent
-    rClient = r = cfg.rClient
-    rCache = R = cfg.rCache
+    r = rClient
+    R = rCache
     vars = globals().copy()
     vars.update(locals())
     print(dedent("""
@@ -116,23 +110,24 @@ def launch_directsdk_shell():
           c = string_ops
           p(): print(json.dumps(jsonInput, indent=4))
           P(): pager(json.dumps(jsonInput, indent=4))"""), file=stderr)
-    cmds = cfg.opts.cmdlineArgs
-    if cfg.opts.useStdin:
-        cmds = stdin.readlines()
-    elif cfg.opts.scriptFile:
-        cmds = open(cfg.opts.scriptFile).readlines()
     shell = code.InteractiveConsole(vars)
-    if cmds:
-        print(file=stderr)
-        for cmd in [line.rstrip('\n') for line in cmds]:
-            if cfg.opts.enableDebugging:
+    if scriptFile or allowScriptedInput:
+        cmds = cfg.opts.cmdlineArgs
+        if scriptFile:
+            cmds = open(scriptFile).readlines()
+        elif cfg.opts.useStdin:
+            cmds = stdin.readlines()
+        elif cfg.opts.scriptFile:
+            cmds = open(cfg.opts.scriptFile).readlines()
+        if cmds:
+            print(file=stderr)
+            for cmd in [line.rstrip('\n') for line in cmds]:
                 c.debug("Running python line: {}".format(cmd), file=stderr)
-            shell.push(cmd)
-        shell.push("")
-    if cfg.opts.useStdin or cfg.opts.scriptFile:
-        shell.push('exit()')
-    else:
-        shell.interact("")
+                shell.push(cmd)
+            shell.push("")
+        if scriptFile or cfg.opts.useStdin or cfg.opts.scriptFile:
+            return
+    shell.interact("")
 
 
 def main():
@@ -146,6 +141,9 @@ def main():
         appnamePrefix = ''
     rClient = cfg.rClient
     rCache = cfg.rCache
+    if rOpt.directsdk:
+        launch_directsdk_shell()
+        exit()
     # Clear preferences if asked via cmdline arg
     if rOpt.clearPreferences:
         remove(path.join(rOpt.userCfgDir, 'prefs.bin'))
@@ -166,23 +164,19 @@ def main():
     if not rOpt.showAllApps:
         # Turn off max depth restriction for admins in restricted-view mode
         shell.prefs['tree_max_depth'] = 0
-    c.verbose("  Fetching data from Ravello . . . ", end='')
+    c.verbose("  Fetching data from Ravello . . . ", end='', file=stderr)
     stdout.flush()
     # Start configshell
     try:
         rootNode = RavelloRoot(shell)
     except:
-        print(c.RED("\n  UNHANDLED EXCEPTION getting data from Ravello\n"))
-        print("If problem persists, send this message with below traceback to rsaw@redhat.com")
+        print(c.RED("\n  UNHANDLED EXCEPTION getting data from Ravello\n"), file=stderr)
+        print("If problem persists, send this message with below traceback to rsaw@redhat.com\n", file=stderr)
         raise
-    c.verbose("Done!\n")
+    c.verbose("Done!\n", file=stderr)
     # For some reason sleep is necessary here to fix issue #49
     sleep(0.1)
     if not is_admin():
-        # What to do when not admin
-        if rOpt.cmdlineArgs or rOpt.scriptFile or rOpt.useStdin:
-            print(c.red("Sorry! Only admins are allowed to use {} non-interactively\n".format(cfg.prog)))
-            return
         try:
             # Plan was to flush sys.stdin with this, per
             # http://abelbeck.wordpress.com/2013/08/29/clear-sys-stdin-buffer/
@@ -190,21 +184,31 @@ def main():
             termios.tcflush(stdin, termios.TCIOFLUSH)
         except:
             print(c.red("Sorry! Only admins are allowed to use {} non-interactively\n".format(cfg.prog)))
-            return
+            exit(1)
         # Initial usage hints
-        print(c.BOLD("Instructions:"))
-        print(" ┐")
-        print(" │ NAVIGATE: Use `{}` and `{}` with tab-completion".format(c.BOLD('cd'), c.BOLD('ls')))
-        print(" │ COMMANDS: Use tab-completion to see commands specific to each directory")
-        print(" │ GET HELP: Use `{}`".format(c.BOLD('help')))
-        print(" │")
-        print(" │ Your first time?")
-        print(" │   - First: use `{}` command".format(c.BOLD('cd apps')))
-        print(" │   - Next: press TAB-TAB to see available commands")
-        print(" │   - Next: use `{}` TAB-TAB command to get started".format(c.BOLD('new')))
-        print(" │   - Optional: `{}` into new app directory and press TAB-TAB to see commands".format(c.BOLD('cd')))
-        print(" │   - Optional: use `{}` command to add an hour to the timer".format(c.BOLD('extend_autostop')))
-        print(" └──────────────────────────────────────────────────────────────────────────────\n")
+        print(dedent("""\
+            {}
+             ┐
+             │ NAVIGATE: Use `{}` and `{}` with tab-completion
+             │ COMMANDS: Use tab-completion to see commands specific to each directory
+             │ GET HELP: Use `{}`
+             │
+             │ Your first time?"
+             │   - First: use `{}` command
+             │   - Next: press TAB-TAB to see available commands
+             │   - Next: use `{}` TAB-TAB command to get started
+             │   - Optional: `{}` into new app directory and press TAB-TAB to see commands
+             │   - Optional: use `{}` command to add an hour to the timer
+             └──────────────────────────────────────────────────────────────────────────────
+            """
+            .format(
+                c.BOLD("Instructions:"),
+                c.BOLD('cd'), c.BOLD('ls'),
+                c.BOLD('help'),
+                c.BOLD('cd apps'),
+                c.BOLD('new'),
+                c.BOLD('cd'),
+                c.BOLD('extend_autostop'))), file=stderr)
         shell.run_interactive(exit_on_error=rOpt.enableDebugging)
         return
     if rOpt.useStdin:
@@ -229,7 +233,7 @@ def main():
             if rOpt.enableDebugging:
                 raise
             else:
-                print(c.red("Continuing despite error running cmd: '{}'".format(cmd)))
+                print(c.yellow("Continuing despite error running cmd: '{}'".format(cmd)), file=stderr)
     # If we're still here, enter interactive cmdline
     shell.run_interactive(exit_on_error=rOpt.enableDebugging)
 
@@ -242,6 +246,7 @@ class RavelloRoot(ConfigNode):
     
     def __init__(self, shell):
         ConfigNode.__init__(self, '/', shell=shell)
+        Applications(self)
         if is_admin():
             Blueprints(self)
             Billing(self)
@@ -251,15 +256,46 @@ class RavelloRoot(ConfigNode):
             # Images(self)
             Shared(self)
             Keypairs(self)
-        Applications(self)
+        else:
+            self.ui_command_directsdk_shell = None
     
     def summary(self):
         if is_admin():
-            status = "Local admin user: {}, Ravello user: {}".format(
-                user, rClient._username)
+            status = "Local admin user: {}, Ravello user: {}".format(user, rClient._username)
         else:
             status = "Logged in as user: {}".format(user)
         return (status, None)
+    
+    def ui_command_directsdk_shell(self, inputFile='@console'):
+        """
+        Launch interactive python shell to run raw SDK queries or debug ravshello.
+        
+        Objects available in this shell:
+          r = rClient = ravello_sdk.RavelloClient()
+          R = rCache = ravello_cache.RavelloCache()
+          c = string_ops
+          p(): print(json.dumps(jsonInput, indent=4))
+          P(): pager(json.dumps(jsonInput, indent=4))
+        
+        For help on the SDK, execute help(r) from the shell or consult:
+        https://github.com/ravello/python-sdk/blob/master/lib/ravello_sdk.py
+        
+        If *inputFile* is anything other than '@console', it should be a file
+        containing python code to be run in the current environment.
+        
+        Note that this shell can also be entered from the OS command-line by
+        use of the -D or --directsdk options.
+        """
+        inputFile = self.ui_eval_param(inputFile, 'string', '@console')
+        if inputFile == '@console':
+            inputFile = None
+        launch_directsdk_shell(scriptFile=inputFile, allowScriptedInput=False)
+    
+    def ui_complete_directsdk_shell(self, parameters, text, current_param):
+        if current_param in ['inputFile']:
+            return _complete_path(text)
+        else:
+            return []
 
 
 class Events(ConfigNode):
