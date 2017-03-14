@@ -238,6 +238,132 @@ def main():
     shell.run_interactive(exit_on_error=rOpt.enableDebugging)
 
 
+def get_vm_access_details(vm):
+    """Get access details about a VM object.
+    
+    Returns a tuple:
+     0) A list of pretty-printable lines (hostnames, IPs, ports, ssh, VNC)
+     1) A simple dict of most important details
+    """
+    out = []
+    deets = {}
+    sshKey = ""
+    if cfg.cfgFile['sshKeyFile']:
+        sshKey = " -i {}".format(cfg.cfgFile['sshKeyFile'])
+    deets['ssh_key'] = sshKey
+    # Colorize some things
+    if vm['state'] in 'STARTED':
+        state = c.GREEN(vm['state'])
+    elif vm['state'] in 'STARTING':
+        state = c.green(vm['state'])
+    elif vm['state'] in 'RESTARTING':
+        state = c.magenta(vm['state'])
+    elif vm['state'] in 'STOPPING':
+        state = c.YELLOW(vm['state'])
+    elif vm['state'] in 'STOPPED':
+        state = c.yellow(vm['state'])
+    elif vm['state'] in 'PUBLISHING':
+        state = c.red(vm['state'])
+    else:
+        state = c.RED(vm['state'])
+    # Print state and hostnames
+    out.append("{}".format(c.BOLD(vm['name'])))
+    out.append("   State:              {}".format(state))
+    if 'hostnames' in vm:
+        out.append("   Internal DNS Name:  {}".format(", ".join(vm['hostnames'])))
+    # Setup empty ssh dict
+    vm['ssh'] = {'port': '', 'fqdn': ''}
+    nics = []
+    # Compile and print details on each network interface
+    for nic in vm.get('networkConnections', []):
+        n = {'name': nic['name'], 'publicIP': '', 'publicIPtype': ''}
+        internal = None
+        ip_Additional = []
+        fqdn = ''
+        ip_Elastic = None
+        ip_Public = None
+        ip_Forwarder = None
+        services = []
+        # Get private IPs
+        if 'autoIpConfig' in nic['ipConfig']:
+            internal = nic['ipConfig']['autoIpConfig']['allocatedIp']
+        elif 'staticIpConfig' in nic['ipConfig']:
+            internal = nic['ipConfig']['staticIpConfig']['ip']
+        n['internalIP'] = internal
+        # Get extra private IPs
+        for addtlIp in nic.get('additionalIpConfig', []):
+            ip_Additional.append(addtlIp['staticIpConfig']['ip'])
+        n['internalIPs'] = ip_Additional
+        # Get FQDN
+        if 'fqdn' in nic['ipConfig']:
+            fqdn = nic['ipConfig']['fqdn']
+        n['fqdn'] = fqdn
+        # Get public IP
+        if nic['ipConfig']['hasPublicIp']:
+            try:
+                ip_Elastic = nic['ipConfig']['elasticIpAddress']
+            except:
+                try:
+                    ip_Public = nic['ipConfig']['publicIp']
+                except:
+                    pass
+        elif 'publicIp' in nic['ipConfig']:
+            ip_Forwarder = nic['ipConfig']['publicIp']
+        # Check for services
+        for svc in vm.get('suppliedServices', []):
+            if svc['external'] and 'externalPort' in svc and svc['useLuidForIpConfig'] and nic['ipConfig']['id'] == svc['ipConfigLuid'] and not svc['name'].startswith('dummy'):
+                services.append(svc)
+                if svc['name'] == 'ssh' and not vm['ssh']['fqdn']:
+                    vm['ssh']['fqdn'] = fqdn
+                    if svc['externalPort'] != "22":
+                        vm['ssh']['port'] = " -p {}".format(svc['externalPort'])
+        n['services'] = services
+        # Finally, print:
+        out.append("   NIC {}".format(nic['name']))
+        out.append("     Internal IP:      {}".format(internal))
+        for ip in ip_Additional:
+            out.append("     Internal IP:      {}".format(ip))
+        if ip_Elastic:
+            out.append("     Public Elastic:   {} ({})".format(ip_Elastic, fqdn))
+            n['publicIP'] = ip_Elastic
+            n['publicIPtype'] = 'elastic'
+        elif ip_Public:
+            out.append("     Public Static:    {} ({})".format(ip_Public, fqdn))
+            n['publicIP'] = ip_Public
+            n['publicIPtype'] = 'static'
+        elif ip_Forwarder and services:
+            out.append("     Public DNAT:      {} ({})".format(ip_Forwarder, fqdn))
+            n['publicIP'] = ip_Forwarder
+            n['publicIPtype'] = 'forwarding'
+        for svc in services:
+            s = "{svc} port {exPort}/{proto} maps to internal port {inPort}".format(
+                svc=svc['name'],
+                exPort=svc['externalPort'],
+                proto=svc['protocol'],
+                inPort=svc['portRange'])
+            out.append("     External Svc:     {}".format(s))
+        nics.append(n)
+    deets['nics'] = nics
+    deets['ssh_port'] = vm['ssh']['port']
+    deets['ssh_fqdn'] = vm['ssh']['fqdn']
+    if vm['state'] in ['STARTING', 'STARTED']:
+        # Print ssh command
+        if vm['ssh']['fqdn']:
+            ssh = c.cyan("ssh{}{} root@{}".format(sshKey, vm['ssh']['port'], vm['ssh']['fqdn']))
+            out.append("   SSH Command:        {}".format(ssh))
+    vnc = ''
+    if vm['state'] in ['STARTED']:
+        try:
+            vnc = rClient.get_vnc_url(vm['applicationId'], vm['id'])
+        except:
+            pass
+        else:
+            # Print VNC url
+            out.append("   VNC Web URL:        {}".format(c.blue(vnc)))
+    deets['vnc'] = vnc
+    return out, deets
+
+
 class RavelloRoot(ConfigNode):
     """Setup the Ravello root node where anything is possible.
     
@@ -1270,7 +1396,7 @@ class Bp(ConfigNode):
         self.bpId = bp['id']
         self.bpOwner = bp['owner']
         self.creationTime = datetime.fromtimestamp(int(str(bp['creationTime'])[:-3]))
-        if bp.has_key('description') and any(tag in bp['description'] for tag in cfg.learnerBlueprintTag):
+        if 'description' in bp and any(tag in bp['description'] for tag in cfg.learnerBlueprintTag):
             self.isLearnerBp = True
             parent.numberOfLearnerBps += 1
         else:
@@ -1959,9 +2085,6 @@ class App(ConfigNode):
         # Defaults
         allVmsAreStarted = True
         allVmsAreStopped = True
-        sshKey = ""
-        if cfg.cfgFile['sshKeyFile']:
-            sshKey = " -i {}".format(cfg.cfgFile['sshKeyFile'])
         try:
             expirationTime = ui.sanitize_timestamp(app['deployment']['expirationTime'])
         except:
@@ -1997,99 +2120,9 @@ class App(ConfigNode):
                 allVmsAreStarted = False
             if vm['state'] not in 'STOPPED':
                 allVmsAreStopped = False
-            # Colorize some things
-            if vm['state'] in 'STARTED':
-                state = c.GREEN(vm['state'])
-            elif vm['state'] in 'STARTING':
-                state = c.green(vm['state'])
-            elif vm['state'] in 'RESTARTING':
-                state = c.magenta(vm['state'])
-            elif vm['state'] in 'STOPPING':
-                state = c.YELLOW(vm['state'])
-            elif vm['state'] in 'STOPPED':
-                state = c.yellow(vm['state'])
-            elif vm['state'] in 'PUBLISHING':
-                state = c.red(vm['state'])
-            else:
-                state = c.RED(vm['state'])
-            # Print state and hostnames
-            print("  {}".format(c.BOLD(vm['name'])))
-            print("     State:              {}".format(state))
-            if vm.has_key('hostnames'):
-                print("     Internal DNS Name:  ", end="")
-                print(*vm['hostnames'], sep=', ')
-            # Setup empty ssh dict
-            vm['ssh'] = {'port': '', 'fqdn': ''}
-            # Compile and print details on each network interface
-            if vm.has_key('networkConnections'):
-                for nic in vm['networkConnections']:
-                    internal = None
-                    ip_Additional = []
-                    fqdn = ''
-                    ip_Elastic = None
-                    ip_Public = None
-                    ip_Forwarder = None
-                    services = []
-                    # Get private IPs
-                    if nic['ipConfig'].has_key('autoIpConfig'):
-                        internal = nic['ipConfig']['autoIpConfig']['allocatedIp']
-                    elif nic['ipConfig'].has_key('staticIpConfig'):
-                        internal = nic['ipConfig']['staticIpConfig']['ip']
-                    # Get extra private IPs
-                    if nic.has_key('additionalIpConfig'):
-                        for addtlIp in nic['additionalIpConfig']:
-                            ip_Additional.append(addtlIp['staticIpConfig']['ip'])
-                    # Get FQDN
-                    if nic['ipConfig'].has_key('fqdn'):
-                        fqdn = nic['ipConfig']['fqdn']
-                    # Get public IP
-                    if nic['ipConfig']['hasPublicIp']:
-                        try:
-                            ip_Elastic = nic['ipConfig']['elasticIpAddress']
-                        except:
-                            try:
-                                ip_Public = nic['ipConfig']['publicIp']
-                            except:
-                                pass
-                    elif nic['ipConfig'].has_key('publicIp'):
-                        ip_Forwarder = nic['ipConfig']['publicIp']
-                    # Check for services
-                    if vm.has_key('suppliedServices'):
-                        for svc in vm['suppliedServices']:
-                            if svc['external'] and svc.has_key('externalPort') and svc['useLuidForIpConfig'] and nic['ipConfig']['id'] == svc['ipConfigLuid'] and not svc['name'].startswith('dummy'):
-                                s = "{svc} port {exPort}/{proto} maps to internal port {inPort}".format(
-                                    svc=svc['name'], exPort=svc['externalPort'], proto=svc['protocol'], inPort=svc['portRange'])
-                                if svc['name'] == 'ssh' and not vm['ssh']['fqdn']:
-                                    vm['ssh']['fqdn'] = fqdn
-                                    if svc['externalPort'] != "22":
-                                        vm['ssh']['port'] = " -p {}".format(svc['externalPort'])
-                                services.append(s)
-                    # Finally, print:
-                    print("     NIC {}".format(nic['name']))
-                    print("       Internal IP:      {}".format(internal))
-                    for ip in ip_Additional:
-                        print("       Internal IP:      {}".format(ip))
-                    if ip_Elastic:
-                        print("       Public Elastic:   {} ({})".format(ip_Elastic, fqdn))
-                    if ip_Public:
-                        print("       Public Static:    {} ({})".format(ip_Public, fqdn))
-                    if ip_Forwarder and services:
-                        print("       Public DNAT:      {} ({})".format(ip_Forwarder, fqdn))
-                    for s in services:
-                        print("       External Svc:     {}".format(s))
-            if vm['state'] in ['STARTING', 'STARTED']:
-                # Print ssh command
-                if vm['ssh']['fqdn']:
-                    ssh = c.cyan("ssh{}{} root@{}".format(sshKey, vm['ssh']['port'], vm['ssh']['fqdn']))
-                    print("     SSH Command:        {}".format(ssh))
-            if vm['state'] in ['STARTED']:
-                # Print VNC url
-                try:
-                    vnc = c.blue(rClient.get_vnc_url(self.appId, vm['id']))
-                except:
-                    pass
-                else:
-                    print("     VNC Web URL:        {}".format(vnc))
+            out = get_vm_access_details(vm)[0]
+            print("  ", end="")
+            print("\n  ".join(out))
             print()
         return allVmsAreStarted, allVmsAreStopped
     
@@ -2590,24 +2623,23 @@ class Vm(ConfigNode):
     
     def get_ssh_details(self):
         rCache.purge_app_cache(self.appId)
-        app = rCache.get_app(self.appId, aspect='deployment')
-        for vm in app['vms']:
-            if vm['id'] == self.vmId:
-                break
-        if not (vm.has_key('networkConnections') or vm.has_key('suppliedServices')):
+        vm = rCache.get_vm(self.appId, self.vmId, aspect='deployment')
+        if not ('networkConnections' in vm or 'suppliedServices' in vm):
             return None
         sshKey = ""
         if cfg.cfgFile['sshKeyFile']:
             sshKey = cfg.cfgFile['sshKeyFile']
         for nic in vm['networkConnections']:
             fqdn = nic['ipConfig'].get('fqdn', "")
-            for svc in vm['suppliedServices']:
-                if fqdn and svc['name'] == 'ssh' and svc['external'] and svc.has_key('externalPort') and svc['useLuidForIpConfig'] and nic['ipConfig']['id'] == svc['ipConfigLuid']:
+            if not fqdn:
+                continue
+            for svc in vm.get('suppliedServices', []):
+                if fqdn and svc['name'] == 'ssh' and svc['external'] and 'externalPort' in svc and svc['useLuidForIpConfig'] and nic['ipConfig']['id'] == svc['ipConfigLuid']:
                     return {'ssh_fqdn': fqdn, 'ssh_port': svc['externalPort'], 'ssh_key': sshKey}
         return None
     
     def ui_command_ssh_cmd(self, outputFile='@term', quiet='false',
-            loopUntilSuccess='false', intervalSec=20):
+            loopUntilSuccess='false', intervalSec=20, totalMin=30):
         """
         Get ssh command that could be used to ssh into deployed VM.
         
@@ -2620,27 +2652,51 @@ class Vm(ConfigNode):
         With *quiet* set to default of 'false', extra details are printed to
         the screen, regardless of the value of *outputFile*.
         
-        With quiet=true and outputFile=@term, only the ssh command is printed.
-        With quiet=true and outputFile=FILE, only the name=value pairs are
-        saved to FILE.
+        With quiet=true and outputFile=@term, only the ssh command is printed
+        (with no extra explanation, colors, etc). With quiet=true and
+        outputFile=FILE, only the name=value pairs are saved to FILE.
+        
+        With *loopUntilStarted* set 'true', you can optionally modify loop
+        interval in seconds via *intervalSec* or total loop time in minutes
+        via *totalMin*. If *outputFile* is specified in this mode, it will
+        be initially truncated but then will only be written to on the final
+        successful loop-iteration (once the VM provides ssh details).
         """
         outputFile = self.ui_eval_param(outputFile, 'string', '@term')
         quiet = self.ui_eval_param(quiet, 'bool', False)
         loopUntilSuccess = self.ui_eval_param(loopUntilSuccess, 'bool', False)
         intervalSec = self.ui_eval_param(intervalSec, 'number', 20)
-        if outputFile == '@term':
-            outputFile = None
-        else:
-            try:
-                outputFile = open(path.expanduser(outputFile), 'w')
-            except:
-                print(c.red("\nError opening outputFile for writing!\n"))
-                raise
+        totalMin = self.ui_eval_param(totalMin, 'number', 30)
+        maxLoops = totalMin * 60 / intervalSec
         if not quiet:
             print()
         if not self.confirm_app_is_published():
             return
-        while 1:
+        if outputFile == '@term':
+            outputFile = None
+        else:
+            try:
+                f = open(path.expanduser(outputFile), 'w')
+            except:
+                print(c.red("\nError opening outputFile for writing!\n"))
+                raise
+        if loopUntilStarted:
+            if not is_admin():
+                if intervalSec < 5:
+                    if not quiet: print(c.red("Using minimum learner interval of 5 sec"))
+                    intervalSec = 5
+                if totalMin > cfg.maxLearnerExtendTime:
+                    if not quiet: print(c.red("Using maximum learner watch-time of {} min"
+                                .format(cfg.maxLearnerExtendTime)))
+                    totalMin = cfg.maxLearnerExtendTime
+                elif totalMin < 1:
+                    if not quiet: print(c.red("Using minimum learner watch-time of 1 min"))
+                    totalMin = 1
+            if not quiet:
+                print(c.yellow("Polling application every {} secs for next {} mins or until VM has STARTED . . .\n"
+                    .format(intervalSec, totalMin)))
+        loopCount = 0
+        while loopCount <= maxLoops:
             sshDetails = self.get_ssh_details()
             if sshDetails:
                 if not quiet:
@@ -2655,7 +2711,8 @@ class Vm(ConfigNode):
                     print("   SSH Command:   {}".format(c.cyan(sshCommand)))
                 if outputFile:
                     for k, v in sshDetails.iteritems():
-                        print("{}={}".format(k, v), file=outputFile)
+                        print("{}='{}'".format(k, v), file=f)
+                    f.close()
                 break
             else:
                 if not quiet:
@@ -2663,6 +2720,7 @@ class Vm(ConfigNode):
                 if not loopUntilSuccess:
                     break
             i = intervalSec
+            loopCount += 1
             if quiet:
                 sleep(i)
             else:
@@ -2673,13 +2731,159 @@ class Vm(ConfigNode):
                     print('\033[2K', end='')
                     i -= 1
                 print()
-        if outputFile:
-            outputFile.close()
         if not quiet:
             print()
     
     def ui_complete_ssh_cmd(self, parameters, text, current_param):
-        if current_param in ['loopUntilSuccess', 'quiet']:
+        if current_param == 'outputFile':
+            return _complete_path(text)
+        elif current_param in ['loopUntilSuccess', 'quiet']:
+            completions = [a for a in ['false', 'true']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
+    
+    def ui_command_query_status(self, outputFile='@term', quiet='false',
+            loopUntilStarted='false', intervalSec=20, totalMin=30):
+        """
+        Query a VM to get full details about it.
+        
+        When *outputFile* is set to anything other than default of '@term',
+        or if *quiet* is set 'true', name=value pairs will be written, e.g.:
+            vm_name='rhel7base'
+            vm_state='STARTED'
+            internal_hostnames='rhel7.example.com,othername.dom.example.com'
+            interfaces='eth0,eth1'
+            eth0_internal_ip='10.0.0.1'
+            eth0_extra_internal_ips='192.168.1.1,10.1.1.1'
+            eth0_public_ip=''
+            eth0_public_ip_type=''
+            eth0_public_fqdn=''
+            eth1_internal_ip='10.200.200.50'
+            eth1_extra_internal_ips=''
+            eth1_public_ip='34.1.1.1'
+            eth1_public_ip_type='forwarding'
+            eth1_public_fqdn='rhel7base-myapp-kqkctw4t....srv.ravcloud.com'
+            eth1_service_0_name='ssh'
+            eth1_service_0_proto='TCP'
+            eth1_service_0_externalport='10001'
+            eth1_service_0_inport_range='22'
+            eth1_service_1_name='http'
+            eth1_service_1_proto='TCP'
+            eth1_service_1_externalport='10002'
+            eth1_service_1_inport_range='80'
+            eth1_service_2_name='https'
+            eth1_service_2_proto='TCP'
+            eth1_service_2_externalport='10003'
+            eth1_service_2_inport_range='443'
+            ssh_fqdn='rhel7base-myapp-kqkctw4t....srv.ravcloud.com'
+            ssh_port='10001'
+            ssh_key=''
+            vnc='https://vnc-us-east-1.ravellosystems.com/vnc/?token=Dc41NcLsCS...'
+            timestamp='1489475068'
+
+        With *quiet* set to default of 'false', the above content is printed in a
+        pretty/organized way to stdout (just like /apps/APP query_status),
+        regardless of the value of *outputFile*.
+        
+        With quiet=true and outputFile=@term, only the above content (ready for
+        scripted-consumption) is printed to stdout. With quiet=true and
+        outputFile=FILE, only the name=value pairs are saved to FILE.
+        
+        With *loopUntilStarted* set 'true', you can optionally modify loop
+        interval in seconds via *intervalSec* or total loop time in minutes
+        via *totalMin*. If *outputFile* is specified in this mode, it will
+        be updated on each iteration of the loop, but the loop will not finish
+        until the VM has started.
+        """
+        outputFile = self.ui_eval_param(outputFile, 'string', '@term')
+        quiet = self.ui_eval_param(quiet, 'bool', False)
+        loopUntilStarted = self.ui_eval_param(loopUntilStarted, 'bool', False)
+        intervalSec = self.ui_eval_param(intervalSec, 'number', 20)
+        totalMin = self.ui_eval_param(totalMin, 'number', 30)
+        maxLoops = totalMin * 60 / intervalSec
+        if not quiet:
+            print()
+        if not self.confirm_app_is_published():
+            return
+        if outputFile == '@term':
+            outputFile = None
+        if loopUntilStarted:
+            if not is_admin():
+                if intervalSec < 5:
+                    if not quiet: print(c.red("Using minimum learner interval of 5 sec"))
+                    intervalSec = 5
+                if totalMin > cfg.maxLearnerExtendTime:
+                    if not quiet: print(c.red("Using maximum learner watch-time of {} min"
+                                .format(cfg.maxLearnerExtendTime)))
+                    totalMin = cfg.maxLearnerExtendTime
+                elif totalMin < 1:
+                    if not quiet: print(c.red("Using minimum learner watch-time of 1 min"))
+                    totalMin = 1
+            if not quiet:
+                print(c.yellow("Polling application every {} secs for next {} mins or until VM has STARTED . . .\n"
+                    .format(intervalSec, totalMin)))
+        loopCount = 0
+        while loopCount <= maxLoops:
+            vm = rClient.get_vm(self.appId, self.vmId, aspect='deployment')
+            out, deets = get_vm_access_details(vm)
+            if not quiet:
+                print("\n".join(out))
+            if quiet or outputFile:
+                if outputFile:
+                    try:
+                        f = open(path.expanduser(outputFile), 'w')
+                    except:
+                        print(c.red("\nError opening outputFile for writing!\n"))
+                        raise
+                else:
+                    f = stdout
+                print("vm_name='{}'".format(vm['name']), file=f)
+                print("vm_state='{}'".format(vm['state']), file=f)
+                print("internal_hostnames='{}'".format(",".join(vm['hostnames'])), file=f)
+                print("interfaces='{}'".format(",".join([n['name'] for n in deets['nics']])), file=f)
+                for n in deets['nics']:
+                    eth = n['name']
+                    print("{}_internal_ip='{}'".format(eth, n['internalIP']), file=f)
+                    print("{}_extra_internal_ips='{}'".format(eth, ",".join(n['internalIPs'])), file=f)
+                    print("{}_public_ip='{}'".format(eth, n['publicIP']), file=f)
+                    print("{}_public_ip_type='{}'".format(eth, n['publicIPtype']), file=f)
+                    print("{}_public_fqdn='{}'".format(eth, n['fqdn']), file=f)
+                    for j, s in enumerate(n['services']):
+                        print("{eth}_service_{j}_name='{name}'".format(eth=eth, j=j, name=s['name']), file=f)
+                        print("{eth}_service_{j}_proto='{proto}'".format(eth=eth, j=j, proto=s['protocol']), file=f)
+                        print("{eth}_service_{j}_externalport='{port}'".format(eth=eth, j=j, port=s['externalPort']), file=f)
+                        print("{eth}_service_{j}_inport_range='{port}'".format(eth=eth, j=j, port=s['portRange']), file=f)
+                for k in ['ssh_fqdn', 'ssh_port', 'ssh_key', 'vnc']:
+                    print("{}='{}'".format(k, deets[k]), file=f)
+                print("timestamp='{:.0f}'".format(time()), file=f)
+                if outputFile:
+                    f.close()
+            if vm['state'] == 'STARTED' or not loopUntilStarted:
+                break
+            i = intervalSec
+            loopCount += 1
+            if quiet:
+                sleep(i)
+            else:
+                while i >= 0:
+                    print(c.REVERSE("{}".format(i)), end='')
+                    stdout.flush()
+                    sleep(1)
+                    print('\033[2K', end='')
+                    i -= 1
+                print()
+        if not quiet:
+            print()
+    
+    def ui_complete_query_status(self, parameters, text, current_param):
+        if current_param == 'outputFile':
+            return _complete_path(text)
+        elif current_param in ['loopUntilStarted', 'quiet']:
             completions = [a for a in ['false', 'true']
                            if a.startswith(text)]
         else:
@@ -3512,9 +3716,9 @@ class Shared(ConfigNode):
         if not child:
             child = self.nodeFromUser[uid] = SharedFromUser(uid, self)
         # Convert the targetEmail/communityId to a string
-        if s.has_key('targetEmail'):
+        if 'targetEmail' in s:
             target = s['targetEmail']
-        elif s.has_key('targetCommunityId'):
+        elif 'targetCommunityId' in s:
             try:
                 community = rClient.get_community(s['targetCommunityId'])
                 target = community['name']
@@ -3756,7 +3960,7 @@ class Share(ConfigNode):
             j = rClient.get_image(resId)
         elif self.resourceType in 'DISK':
             j = rClient.get_diskimage(resId)
-        if j and j.has_key('name'):
+        if j and 'name' in j:
             self.resource = '"{}"'.format(j['name'])
             self.name = c.replace_bad_chars_with_underscores(j['name'])
         else:
@@ -3955,11 +4159,11 @@ class Keypair(ConfigNode):
         ConfigNode.__init__(self, self.kpString, parent)
         parent.numberOfKps += 1
         self.kp = kp
-        if kp.has_key('creator'):
+        if 'creator' in kp:
             user = kp['creator']['nickname']
         else:
             user = "(NULL)"
-        if kp.has_key('creationTime'):
+        if 'creationTime' in kp:
             _date = ui.convert_ts_to_date(kp['creationTime'], showHours=False)
         else:
             _date = "(NULL)"
