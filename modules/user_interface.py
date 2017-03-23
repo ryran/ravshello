@@ -1343,6 +1343,7 @@ class Blueprints(ConfigNode):
             return ("To populate, run: refresh", False)
     
     def refresh(self):
+        rCache.update_bp_cache()
         self._children = set([])
         sharedWithMe = SharedBps(self)
         self.numberOfBps = self.numberOfLearnerBps = 0
@@ -1737,9 +1738,9 @@ class Applications(ConfigNode):
                 if len(a):
                     aFixed = c.replace_bad_chars_with_underscores(a)
                     if a != aFixed:
-                        print(c.red(
+                        print(c.yellow(
                             "\nNote that configshell (which {} uses) won't accept certain chars in paths\n"
-                            "Namely, only the following are allowed: A-Za-z0-9:_.-\n"
+                            "Namely, only the following are allowed: A-Za-z0-9:_.~-\n"
                             "In order handle apps with characters BESIDES those, one would have to use the\n"
                             "*interactive* cd command with arrow keys".format(cfg.prog)))
                         response = raw_input(c.CYAN("\nReplace bad characters with underscores? [y/N] "))
@@ -1861,6 +1862,8 @@ class App(ConfigNode):
         parent.numberOfApps += 1
         self.appName = appName
         self.appId = appId
+        if not is_admin():
+            self.ui_command_save_blueprint = None
         Vms(self)
     
     def summary(self):
@@ -2200,7 +2203,91 @@ class App(ConfigNode):
         description = "APP {} definition for /apps/{}".format(aspect, self.appName)
         obj = rClient.get_application(self.appId, aspect=aspect)
         ui.print_obj(obj, description, outputFile, tmpPrefix=self.appName)
+    
+    def ui_command_save_blueprint(self, name='@prompt', desc='@prompt',
+            shutdown='true', allowExactName='false'):
+        """
+        Interactively create a new blueprint from application.
+        
+        Optionally specify all parameters on the command-line.
+        Note that blueprint *name* & *desc* can be set to '@auto' -- this bases
+        them off of the application name and description.
+        
+        Note: due to a limitation in ConfigShell, *desc* cannot accept
+        multiple arguments (i.e., you cannot pass multiple words with spaces,
+        even if you use quotes).
 
+        *shutdown* defaults to 'true', in which case it will ensure the app
+        is stopped prior to taking the snapshot. This is of course
+        recommended -- taking snapshots of running machines is not a good
+        idea.
+        
+        Also note that with the default behavior of allowExactName=false, a
+        unique number will be appended to the end of the requested BP name in
+        order to avoid name collisions.
+        """
+        name = self.ui_eval_param(name, 'string', '@prompt')
+        desc = self.ui_eval_param(desc, 'string', '@prompt')
+        shutdown = self.ui_eval_param(shutdown, 'bool', True)
+        allowExactName = self.ui_eval_param(allowExactName, 'bool', False)
+        bpName = c.replace_bad_chars_with_underscores(rCache.get_app(self.appId)['name'])
+        if name == '@prompt':
+            a = raw_input(c.CYAN("\nEnter a name for the new blueprint [{}]: ".format(bpName)))
+            if len(a):
+                aFixed = c.replace_bad_chars_with_underscores(a)
+                if a != aFixed:
+                    print(c.yellow(
+                        "\nNote that configshell (which {} uses) won't accept certain chars in paths\n"
+                        "Namely, only the following are allowed: A-Za-z0-9:_.~-\n"
+                        "In order handle apps with characters BESIDES those, one would have to use the\n"
+                        "*interactive* cd command with arrow keys".format(cfg.prog)))
+                    response = raw_input(c.CYAN("\nReplace bad characters with underscores? [y/N] "))
+                    if response == 'y':
+                        a = aFixed
+                bpName = a
+            name = bpName
+        elif name == '@auto':
+            name = bpName
+        # Ensure there's not already a bp with that name
+        if not allowExactName:
+            name = ravello_sdk.new_name(rCache.get_bps(myOrgOnly=True), name + '_')
+        if desc == '@prompt':
+            desc = raw_input(c.CYAN("\nOptionally enter a description for your new app: "))
+            if len(desc):
+                desc += ' '
+            else:
+                desc = ''
+        elif desc == '@auto':
+            desc = ''
+        else:
+            desc += ' '
+        desc += "[Created w/{} {} by {} from app '{}']".format(cfg.prog, cfg.__version__, user, self.appName)
+        req = {'applicationId': self.appId, 'blueprintName': name, 'offline': shutdown, 'description': desc}
+        print(c.yellow("\nSaving blueprint from application . . . "), end="")
+        stdout.flush()
+        # Attempt create request!
+        try:
+            newBp = rClient.create_blueprint(req)
+        except:
+            print(c.red("\n\nProblem creating blueprint!\n"))
+            raise
+        print(c.green("DONE!\n\nCreated new blueprint: {}\n".format(newBp['name'])))
+        rCache.update_bp_cache()
+    
+    def ui_complete_save_blueprint(self, parameters, text, current_param):
+        if current_param in ['name', 'desc']:
+            completions = [a for a in ['@prompt', '@auto']
+                           if a.startswith(text)]
+        elif current_param in ['shutdown', 'allowExactName']:
+            completions = [a for a in ['true', 'false']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
+    
     def ui_complete_print_def(self, parameters, text, current_param):
         if current_param == 'outputFile':
             return _complete_path(text)
