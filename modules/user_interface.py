@@ -2204,8 +2204,8 @@ class App(ConfigNode):
         obj = rClient.get_application(self.appId, aspect=aspect)
         ui.print_obj(obj, description, outputFile, tmpPrefix=self.appName)
     
-    def ui_command_save_blueprint(self, name='@prompt', desc='@prompt',
-            shutdown='true', allowExactName='false'):
+    def ui_command_save_blueprint(self, name='@prompt', desc='@prompt', shutdown='true',
+            waitSnapshotCompletion='true', allowExactName='false'):
         """
         Interactively create a new blueprint from application.
         
@@ -2222,12 +2222,18 @@ class App(ConfigNode):
         recommended -- taking snapshots of running machines is not a good
         idea.
         
+        *waitSnapshotCompletion* defaults to 'true', in which case the command
+        will not return until each VM's 'loadingStatus' attribute has returned
+        to the 'DONE' state. The VM will not respond to start commands until
+        this  is the case (at least for offline [shutdown=true] snapshots).
+        
         Also note that with the default behavior of allowExactName=false, a
         unique number will be appended to the end of the requested BP name in
         order to avoid name collisions.
         """
         name = self.ui_eval_param(name, 'string', '@prompt')
         desc = self.ui_eval_param(desc, 'string', '@prompt')
+        waitSnapshotCompletion = self.ui_eval_param(waitSnapshotCompletion, 'bool', True)
         shutdown = self.ui_eval_param(shutdown, 'bool', True)
         allowExactName = self.ui_eval_param(allowExactName, 'bool', False)
         bpName = c.replace_bad_chars_with_underscores(rCache.get_app(self.appId)['name'])
@@ -2272,13 +2278,31 @@ class App(ConfigNode):
             print(c.red("\n\nProblem creating blueprint!\n"))
             raise
         print(c.green("DONE!\n\nCreated new blueprint: {}\n".format(newBp['name'])))
-        rCache.update_bp_cache()
+        rCache.purge_bp_cache()
+        if not waitSnapshotCompletion:
+            return
+        print(c.yellow("Waiting for all VMs to finish snapshotting . . ."))
+        while 1:
+            app = rClient.get_application(self.appId, aspect='deployment')
+            status = list(set([vm['loadingStatus'] for vm in app['deployment']['vms']]))
+            if len(status) == 1 and 'DONE' in status:
+                break
+            i = 30
+            while i >= 0:
+                print(c.REVERSE("{}".format(i)), end='', file=stderr)
+                stderr.flush()
+                sleep(1)
+                print('\033[2K', end='', file=stderr)
+                i -= 1
+            print(file=stderr)
+        print(c.green("DONE!\n"))
+
     
     def ui_complete_save_blueprint(self, parameters, text, current_param):
         if current_param in ['name', 'desc']:
             completions = [a for a in ['@prompt', '@auto']
                            if a.startswith(text)]
-        elif current_param in ['shutdown', 'allowExactName']:
+        elif current_param in ['shutdown', 'waitSnapshotCompletion', 'allowExactName']:
             completions = [a for a in ['true', 'false']
                            if a.startswith(text)]
         else:
