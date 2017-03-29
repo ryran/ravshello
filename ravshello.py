@@ -211,6 +211,7 @@ def main():
     # Setup color/verbosity
     c.enableColor = rOpt.enableColor
     c.enableVerbose = rOpt.enableVerbose
+    c.enableDebug = rOpt.enableDebugging
     
     # Trigger -a if -A was called
     if rOpt.showAllApps:

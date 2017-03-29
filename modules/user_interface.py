@@ -2134,7 +2134,7 @@ class App(ConfigNode):
             rClient.set_application_expiration(self.appId, req)
         except:
             print(c.red("\nProblem setting application auto-stop!"))
-            return
+            raise
         print(c.green("\nApp auto-stop set for {} minutes from now"
                       .format(minutes)))
         rCache.purge_app_cache(self.appId)
