@@ -2506,12 +2506,13 @@ class App(ConfigNode):
         else:
             return completions
     
-    def ui_command_start(self):
+    def ui_command_start(self, loopQueryStatus='true'):
         """
         Start a stopped application.
         
         Attempts to start all VMs in the application.
         """
+        loopQueryStatus = self.ui_eval_param(loopQueryStatus, 'bool', True)
         if not self.confirm_app_is_published():
             return
         if not is_admin():
@@ -2531,7 +2532,21 @@ class App(ConfigNode):
             raise
         print(c.yellow("\nApplication now starting"))
         rCache.purge_app_cache(self.appId)
-        self.loop_query_status(desiredState='STARTED')
+        if loopQueryStatus:
+            self.loop_query_status(desiredState='STARTED')
+        else:
+            print()
+    
+    def ui_complete_start(self, parameters, text, current_param):
+        if current_param in ['loopQueryStatus']:
+            completions = [a for a in ['true', 'false']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
     
     def ui_command_Stop(self):
         """
