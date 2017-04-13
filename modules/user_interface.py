@@ -29,7 +29,6 @@ except:
           "(Do system install or symlink into ravshello-working-dir/configshell_fb)\n")
     raise
 # Remove configshell commands that we don't need or want
-del ConfigNode.ui_command_pwd
 del ConfigNode.ui_command_bookmarks
 del ConfigNode.ui_complete_bookmarks
 
@@ -1421,16 +1420,6 @@ class Bp(ConfigNode):
             happy = None
         return ("{} created {}".format(self.bpOwner, created), happy)
     
-    def delete(self):
-        try:
-            rClient.delete_blueprint(self.bpId)
-        except:
-            print(c.red("Problem deleting blueprint!\n"))
-            raise
-        print(c.green("Deleted blueprint {}\n".format(self.bpName)))
-        self.parent.remove_child(self)
-        self.parent.numberOfBps -= 1
-    
     def ui_command_delete(self, noconfirm='false'):
         """
         Delete a blueprint.
@@ -1445,7 +1434,14 @@ class Bp(ConfigNode):
             response = raw_input(c.CYAN("Continue with blueprint deletion? [y/N] "))
             print()
         if noconfirm or response == 'y':
-            self.delete()
+            try:
+                rClient.delete_blueprint(self.bpId)
+            except:
+                print(c.red("Problem deleting blueprint!\n"))
+                raise
+            print(c.green("Deleted blueprint {}\n".format(self.bpName)))
+            self.parent.remove_child(self)
+            self.parent.numberOfBps -= 1
         else:
             print("Leaving bp intact (probably a good choice)\n")
     
@@ -1864,6 +1860,7 @@ class App(ConfigNode):
         self.appId = appId
         if not is_admin():
             self.ui_command_save_blueprint = None
+            self.ui_command_rename = None
         Vms(self)
     
     def summary(self):
@@ -2341,23 +2338,6 @@ class App(ConfigNode):
         ui.print_obj(rClient.get_application_publish_locations(self.appId),
             description, outputFile, tmpPrefix='publoc_{}'.format(self.appName))
     
-    def delete_app(self):
-        if self.confirm_app_is_published(quiet=True):
-            published = True
-        else:
-            published = False
-        try:
-            rClient.delete_application(self.appId)
-        except:
-            print(c.red("Problem deleting app!\n"))
-            raise
-        if published:
-            self.parent.numberOfPublishedApps -= 1
-        rCache.purge_app_cache(self.appId)
-        self.parent.numberOfApps -= 1
-        print(c.green("Deleted application {}".format(self.appName)))
-        self.parent.remove_child(self)
-    
     def ui_command_delete(self, noconfirm='false'):
         """
         Delete an application.
@@ -2372,7 +2352,21 @@ class App(ConfigNode):
             response = raw_input(c.CYAN("Continue? [y/N] "))
             print()
         if noconfirm or response == 'y':
-            self.delete_app()
+            if self.confirm_app_is_published(quiet=True):
+                published = True
+            else:
+                published = False
+            try:
+                rClient.delete_application(self.appId)
+            except:
+                print(c.red("Problem deleting app!\n"))
+                raise
+            if published:
+                self.parent.numberOfPublishedApps -= 1
+            rCache.purge_app_cache(self.appId)
+            self.parent.numberOfApps -= 1
+            print(c.green("Deleted application {}".format(self.appName)))
+            self.parent.remove_child(self)
         else:
             print("Leaving app intact (probably a good choice)")
         print()
@@ -2506,6 +2500,103 @@ class App(ConfigNode):
         else:
             return completions
     
+    def ui_command_rename(self, name='@prompt', append='false', addUserPrefix='true'):
+        """
+        Rename an application.
+        
+        With name=@prompt, an interactive prompt will be displayed.
+        
+        With append=true, the value of *name* will be appended to the current
+        name instead of replacing it.
+        
+        The *addUserPrefix* option will only be consulted when using
+        append=false. With addUserPrefix=true, ravshello will add the standard
+        "k:<USER>__" prefix to the provided app name (if it's missing).
+        
+        With name=@auto (regardless of *append* & *addUserPrefix*), the string
+        "_<N>" will be appended to the application's current name -- where <N>
+        is a number starting at 0. The number will be incremented as necessary
+        in order to avoid collisions with other application names. Since apps
+        created by ravshello without the allowExactName=true option already
+        have a "_<N>" suffix, this could result in an odd-looking app name,
+        e.g.: "APPNAME_0_0"
+        
+        Warning: if this command succeeds, your shell current working dir will
+        unconditionally change to the newly-named app dir -- regardless of
+        where you ran the command from. You can use the "cd <" command to go to
+        the previous directory.
+        """
+        name = self.ui_eval_param(name, 'string', '@prompt')
+        append = self.ui_eval_param(append, 'bool', False)
+        addUserPrefix = self.ui_eval_param(addUserPrefix, 'bool', True)
+        app = rClient.get_application(self.appId)
+        if name == '@prompt':
+            if append:
+                msg = "\nEnter a string to append to your application's name: "
+            else:
+                msg = "\nEnter a new name for your application: "
+            a = ""
+            while not len(a):
+                a = raw_input(c.CYAN(msg))
+            aFixed = c.replace_bad_chars_with_underscores(a)
+            if a != aFixed:
+                print(c.yellow(
+                    "\nNote that configshell (which {} uses) won't accept certain chars in paths\n"
+                    "Namely, only the following are allowed: A-Za-z0-9:_.~-\n"
+                    "In order handle apps with characters BESIDES those, one would have to use the\n"
+                    "*interactive* cd command with arrow keys".format(cfg.prog)))
+                response = raw_input(c.CYAN("\nReplace bad characters with underscores? [y/N] "))
+                if response == 'y':
+                    a = aFixed
+            name = a
+        # Handle other cases
+        if name == '@auto':
+            name = ravello_sdk.new_name(rClient.get_applications(), app['name'] + '_')
+        elif append:
+            # Only pay attention to append=true if name!=@auto
+            name = app['name'] + name
+        elif addUserPrefix and not name.startswith(appnamePrefix):
+            # Add appnamePrefix if missing
+            name = appnamePrefix + name
+        # Write name into app object
+        app['name'] = name
+        print(c.yellow("\nUpdating app with new name . . . "))
+        # Attempt rename request!
+        try:
+            newApp = rClient.update_application(app)
+        except:
+            print(c.red("\nProblem updating application!\n"))
+            raise
+        # Grab our official new app name
+        newName = newApp['name']
+        # Strip appname prefix for purposes of our UI only if not showAllApps
+        if rOpt.showAllApps:
+            xtradetails = ""
+        else:
+            newName = newName.replace(appnamePrefix, '')
+            xtradetails = " (Full name: '{}')".format(newApp['name'])
+        print(c.green("\nApplication renamed to '{}'!{}".format(newName, xtradetails)))
+        # Cleanup configshell nodes
+        rCache.purge_app_cache(self.appId)
+        App("%s" % newName, self.parent, newApp['id'])
+        self.parent.remove_child(self)
+        print()
+        return self.ui_command_cd('/apps/{}'.format(newName))
+
+    def ui_complete_rename(self, parameters, text, current_param):
+        if current_param == 'name':
+            completions = [a for a in ['@prompt', '@auto', self.appName]
+                           if a.startswith(text)]
+        elif current_param in ['append', 'addUserPrefix']:
+            completions = [a for a in ['true', 'false']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
+
     def ui_command_start(self, loopQueryStatus='true'):
         """
         Start a stopped application.
@@ -4136,27 +4227,6 @@ class Share(ConfigNode):
         else:
             return []
     
-    def delete(self):
-        try:
-            rClient.delete_share(self.shareId)
-        except:
-            print(c.red("Problem deleting share!\n"))
-            raise
-        print(c.green("Deleted share {}\n".format(self.shareId)))
-        rCache.purge_share_cache(self.shareId)
-        self.parent.parent.parent.numberOfShares -= 1
-        self.parent.parent.numberOfShares -= 1
-        self.parent.numberOfShares -= 1
-        if not self.parent.parent.numberOfShares:
-            # If the sharing user has no more shares, remove everything
-            rootNode.get_child('shared').remove_child(self.parent.parent)
-        elif not self.parent.numberOfShares:
-            # Or if theere are no more resources shared TO the same target, remove that
-            self.parent.parent.remove_child(self.parent)
-        else:
-            # Otherwise, just remove ourself
-            self.parent.remove_child(self)
-    
     def ui_command_delete(self, noconfirm='false'):
         """
         Delete a share.
@@ -4170,7 +4240,25 @@ class Share(ConfigNode):
             response = raw_input(c.CYAN("Continue with share deletion? [y/N] "))
             print()
         if noconfirm or response == 'y':
-            self.delete()
+            try:
+                rClient.delete_share(self.shareId)
+            except:
+                print(c.red("Problem deleting share!\n"))
+                raise
+            print(c.green("Deleted share {}\n".format(self.shareId)))
+            rCache.purge_share_cache(self.shareId)
+            self.parent.parent.parent.numberOfShares -= 1
+            self.parent.parent.numberOfShares -= 1
+            self.parent.numberOfShares -= 1
+            if not self.parent.parent.numberOfShares:
+                # If the sharing user has no more shares, remove everything
+                rootNode.get_child('shared').remove_child(self.parent.parent)
+            elif not self.parent.numberOfShares:
+                # Or if theere are no more resources shared TO the same target, remove that
+                self.parent.parent.remove_child(self.parent)
+            else:
+                # Otherwise, just remove ourself
+                self.parent.remove_child(self)
         else:
             print("Leaving share intact\n")
     
@@ -4336,17 +4424,6 @@ class Keypair(ConfigNode):
         else:
             return []
     
-    def delete(self):
-        try:
-            rClient.delete_keypair(self.kp['id'])
-        except:
-            print(c.red("Problem deleting public key!\n"))
-            raise
-        self.parent.numberOfKps -= 1
-        rCache.purge_keypair_cache(self.kp['id'])
-        print(c.green("Deleted public key '{}' ({})\n".format(self.kp['name'], self.kp['id'])))
-        self.parent.remove_child(self)
-    
     def ui_command_delete(self, noconfirm='false'):
         """
         Delete a public key.
@@ -4362,7 +4439,15 @@ class Keypair(ConfigNode):
             response = raw_input(c.CYAN("Continue with key deletion? [y/N] "))
             print()
         if noconfirm or response == 'y':
-            self.delete()
+            try:
+                rClient.delete_keypair(self.kp['id'])
+            except:
+                print(c.red("Problem deleting public key!\n"))
+                raise
+            self.parent.numberOfKps -= 1
+            rCache.purge_keypair_cache(self.kp['id'])
+            print(c.green("Deleted public key '{}' ({})\n".format(self.kp['name'], self.kp['id'])))
+            self.parent.remove_child(self)
         else:
             print("Leaving key pair intact\n")
     
@@ -4380,6 +4465,11 @@ class Keypair(ConfigNode):
     def ui_command_rename(self, name='@prompt'):
         """
         Rename a public key.
+        
+        Warning: if this command succeeds, your shell current working dir will
+        unconditionally change to the newly-named key dir -- regardless of
+        where you ran the command from. You can use the "cd <" command to go to
+        the previous directory.
         """
         name = self.ui_eval_param(name, 'string', '@prompt')
         if name == '@prompt':
@@ -4399,6 +4489,7 @@ class Keypair(ConfigNode):
             raise
         print(c.green("\nSUCCESS! Public key {} renamed from '{}' to '{}'!".format(self.kp['id'], self.kp['name'], kp['name'])))
         rCache.purge_keypair_cache(self.kp['id'])
-        Keypair(kp, self.parent)
+        newKp = Keypair(kp, self.parent)
         self.parent.remove_child(self)
         print()
+        return self.ui_command_cd('/keypairs/{}'.format(newKp.name))
