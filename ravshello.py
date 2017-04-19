@@ -139,6 +139,12 @@ def main():
         '--prompt-nick', dest='promptNickname', action='store_true',
         help="Prompt for nickname to use for app-filtering")
     grpU.add_argument(
+        '--never-prompt-creds', dest='neverPromptCreds', action='store_true',
+        help=("Never prompt for Ravello user or pass credentials if missing; "
+              "instead exit with standard 'Logging in to Ravello failed' message "
+              "and set exit code '5' (note that using this will override an "
+              "explicit 'neverPromptCreds=false' setting from a config file)"))
+    grpU.add_argument(
         '-n', '--nocolor', dest='enableColor', action='store_false',
         help="Disable all color terminal enhancements")
     grpU.add_argument('--cfgdir', dest='userCfgDir', metavar='CFGDIR',
@@ -245,13 +251,6 @@ def main():
     apply_config_file(os.path.join(rOpt.userCfgDir, rOpt.cfgFileName))
     # Do some checking of cfgfile options
     if cfg.cfgFile:
-        # Validate pre-run commands
-        preRunCommands = cfg.cfgFile.get('preRunCommands', [])
-        if not isinstance(preRunCommands, list):
-            print(c.yellow(
-                "Error: Ignoring configFile `preRunCommands` directive because it's not a list\n"
-                "  See /usr/share/{}/config.yaml for example".format(cfg.prog)), file=stderr)
-            del cfg.cfgFile['preRunCommands']
         # Handle include files
         includes = cfg.cfgFile.get('includes', [])
         if isinstance(includes, list):
@@ -264,6 +263,22 @@ def main():
         else:
             print(c.yellow(
                 "Error: Ignoring configFile `includes` directive because it's not a list\n"
+                "  See /usr/share/{}/config.yaml for example".format(cfg.prog)), file=stderr)
+        # Validate pre-run commands
+        preRunCommands = cfg.cfgFile.get('preRunCommands', [])
+        if not isinstance(preRunCommands, list):
+            print(c.yellow(
+                "Error: Ignoring configFile `preRunCommands` directive because it's not a list\n"
+                "  See /usr/share/{}/config.yaml for example".format(cfg.prog)), file=stderr)
+            del cfg.cfgFile['preRunCommands']
+        # Validate neverPromptCreds
+        neverPromptCreds = cfg.cfgFile.get('neverPromptCreds', False)
+        if isinstance(neverPromptCreds, bool):
+            if neverPromptCreds:
+                rOpt.neverPromptCreds = True
+        else:
+            print(c.yellow(
+                "Error: Ignoring configFile `neverPromptCreds` directive because it's not a boolean\n"
                 "  See /usr/share/{}/config.yaml for example".format(cfg.prog)), file=stderr)
     
     # Set sshKeyFile var to none if missing

@@ -1984,7 +1984,7 @@ class App(ConfigNode):
                   .format(c.BOLD("ls")))
     
     def ui_command_loop_query_status(self, desiredState=None,
-            intervalSec=20, totalMin=30):
+            intervalSec=20, totalMin=30, quiet='false'):
         """
         Execute query_status command on a loop.
         
@@ -1992,10 +1992,14 @@ class App(ConfigNode):
         state (choose between 'STARTED' & 'STOPPED').
         Optionally specify loop interval in seconds via *intervalSec*.
         Optionally specify total loop time in minutes via *totalMin*.
+        Optionally specify quiet=true and desiredState=(STARTED|STOPPED) to
+        prevent output of countdown timer and application details -- there
+        will be no output until all VMs reach *desiredState*.
         """
         desiredState = self.ui_eval_param(desiredState, 'string', 'None')
         intervalSec = self.ui_eval_param(intervalSec, 'number', 20)
         totalMin = self.ui_eval_param(totalMin, 'number', 30)
+        quiet = self.ui_eval_param(quiet, 'bool', False)
         if not is_admin():
             if intervalSec < 5:
                 print(c.red("\nUsing minimum learner interval of 5 sec"))
@@ -2007,11 +2011,17 @@ class App(ConfigNode):
             elif totalMin < 1:
                 print(c.red("\nUsing minimum learner watch-time of 1 min"))
                 totalMin = 1
-        self.loop_query_status(desiredState, intervalSec, totalMin)
+        if quiet and not desiredState:
+            print(c.RED("\nThe quiet=true option requires setting desiredState option\n"))
+            return
+        self.loop_query_status(desiredState, intervalSec, totalMin, quiet)
     
     def ui_complete_loop_query_status(self, parameters, text, current_param):
         if current_param == 'desiredState':
             completions = [a for a in ['STARTED', 'STOPPED']
+                           if a.startswith(text)]
+        elif current_param in ['quiet']:
+            completions = [a for a in ['true', 'false']
                            if a.startswith(text)]
         else:
             completions = []
@@ -2020,10 +2030,10 @@ class App(ConfigNode):
         else:
             return completions
     
-    def loop_query_status(self, desiredState=None, intervalSec=20, totalMin=30):
+    def loop_query_status(self, desiredState=None, intervalSec=20, totalMin=30, quiet=False):
         maxLoops = totalMin * 60 / intervalSec
         print(c.yellow(
-            "\nPolling application every {} secs for next {} mins to display "
+            "\nPolling application every {} secs for next {} mins to get "
             "VM status . . .".format(intervalSec, totalMin)))
         if desiredState:
             print("Will stop polling when all VMs reach '{}' state"
@@ -2034,13 +2044,17 @@ class App(ConfigNode):
         while loopCount <= maxLoops:
             i = intervalSec
             while i >= 0:
-                print(c.REVERSE("{}".format(i)), end='')
-                stdout.flush()
-                sleep(1)
-                print('\033[2K', end='')
+                if quiet:
+                    sleep(1)
+                else:
+                    print(c.REVERSE("{}".format(i)), end='')
+                    stdout.flush()
+                    sleep(1)
+                    print('\033[2K', end='')
                 i -= 1
-            print()
-            allVmsStarted, allVmsStopped = self.query_status()
+            if not quiet:
+                print()
+            allVmsStarted, allVmsStopped = self.query_status(quiet=quiet)
             if desiredState == 'STARTED' and allVmsStarted:
                 break
             if desiredState == 'STOPPED' and allVmsStopped:
@@ -2076,53 +2090,54 @@ class App(ConfigNode):
         print()
         self.query_status()
     
-    def query_status(self):
+    def query_status(self, quiet=False):
         app = rClient.get_application(self.appId, aspect='deployment')
         if not app['published']:
             self.print_message_app_not_published()
             return None, None
         # Defaults
-        allVmsAreStarted = True
-        allVmsAreStopped = True
-        try:
-            expirationTime = ui.sanitize_timestamp(app['deployment']['expirationTime'])
-        except:
-            expirationTime = None
-        if expirationTime:
-            diff = expirationTime - time()
-            m, s = divmod(expirationTime - time(), 60)
-            expireDateTime = datetime.fromtimestamp(expirationTime)
-            if diff < 0:
-                autoStopMessage = c.BOLD("were auto-stopped on {}".format(
-                    expireDateTime.strftime('%Y/%m/%d @ %H:%M')))
-            else:
-                t = "{:.0f}:{:02.0f}".format(m, s)
-                if m <= 4:
-                    timestring = c.bgRED(t)
-                elif m <= 15:
-                    timestring = c.RED(t)
-                elif m <= 30:
-                    timestring = c.YELLOW(t)
+        allVmsAreStarted = False
+        allVmsAreStopped = False
+        vmStates = list(set([vm['state'] for vm in app['deployment']['vms']]))
+        if len(vmStates) == 1 and vmStates[0] == 'STARTED':
+            allVmsAreStarted = True
+        if len(vmStates) == 1 and vmStates[0] == 'STOPPED':
+            allVmsAreStopped = True
+        if not quiet:
+            try:
+                expirationTime = ui.sanitize_timestamp(app['deployment']['expirationTime'])
+            except:
+                expirationTime = None
+            if expirationTime:
+                diff = expirationTime - time()
+                m, s = divmod(expirationTime - time(), 60)
+                expireDateTime = datetime.fromtimestamp(expirationTime)
+                if diff < 0:
+                    autoStopMessage = c.BOLD("were auto-stopped on {}".format(
+                        expireDateTime.strftime('%Y/%m/%d @ %H:%M')))
                 else:
-                    timestring = c.GREEN(t)
-                autoStopMessage = c.BOLD("will auto-stop in {}".format(timestring))
-                autoStopMessage += c.BOLD(" min at {}".format(expireDateTime.strftime('%H:%M:%S')))
-        else:
-            autoStopMessage = c.BOLD("never had auto-stop set")
-        # Print our header message
-        region = app['deployment']['regionName'].replace(" ", "-")
-        print(c.BOLD("App VMs in region {} {}".format(region, autoStopMessage)))
-        print()
-        for vm in app['deployment']['vms']:
-            # Set variables for return
-            if vm['state'] not in 'STARTED':
-                allVmsAreStarted = False
-            if vm['state'] not in 'STOPPED':
-                allVmsAreStopped = False
-            out = get_vm_access_details(vm)[0]
-            print("  ", end="")
-            print("\n  ".join(out))
+                    t = "{:.0f}:{:02.0f}".format(m, s)
+                    if m <= 4:
+                        timestring = c.bgRED(t)
+                    elif m <= 15:
+                        timestring = c.RED(t)
+                    elif m <= 30:
+                        timestring = c.YELLOW(t)
+                    else:
+                        timestring = c.GREEN(t)
+                    autoStopMessage = c.BOLD("will auto-stop in {}".format(timestring))
+                    autoStopMessage += c.BOLD(" min at {}".format(expireDateTime.strftime('%H:%M:%S')))
+            else:
+                autoStopMessage = c.BOLD("never had auto-stop set")
+            # Print our header message
+            region = app['deployment']['regionName'].replace(" ", "-")
+            print(c.BOLD("App VMs in region {} {}".format(region, autoStopMessage)))
             print()
+            for vm in app['deployment']['vms']:
+                out = get_vm_access_details(vm)[0]
+                print("  ", end="")
+                print("\n  ".join(out))
+                print()
         return allVmsAreStarted, allVmsAreStopped
     
     def extend_autostop(self, minutes=60):
@@ -2202,7 +2217,7 @@ class App(ConfigNode):
         ui.print_obj(obj, description, outputFile, tmpPrefix=self.appName)
     
     def ui_command_save_blueprint(self, name='@prompt', desc='@prompt', shutdown='true',
-            waitSnapshotCompletion='true', allowExactName='false'):
+            waitSnapshotCompletion='true', allowExactName='false', quiet='false'):
         """
         Interactively create a new blueprint from application.
         
@@ -2221,8 +2236,10 @@ class App(ConfigNode):
         
         *waitSnapshotCompletion* defaults to 'true', in which case the command
         will not return until each VM's 'loadingStatus' attribute has returned
-        to the 'DONE' state. The VM will not respond to start commands until
-        this  is the case (at least for offline [shutdown=true] snapshots).
+        to the 'DONE' state. (Status will be checked on a loop every 20sec.)
+        Note that each VM will not respond to start commands until it returns
+        to DONE state (at least for offline [shutdown=true] snapshots), so
+        using waitSnapshotCompletion=true is a good idea.
         
         Also note that with the default behavior of allowExactName=false, a
         unique number will be appended to the end of the requested BP name in
@@ -2233,6 +2250,7 @@ class App(ConfigNode):
         waitSnapshotCompletion = self.ui_eval_param(waitSnapshotCompletion, 'bool', True)
         shutdown = self.ui_eval_param(shutdown, 'bool', True)
         allowExactName = self.ui_eval_param(allowExactName, 'bool', False)
+        quiet = self.ui_eval_param(quiet, 'bool', False)
         bpName = c.replace_bad_chars_with_underscores(rCache.get_app(self.appId)['name'])
         if name == '@prompt':
             a = raw_input(c.CYAN("\nEnter a name for the new blueprint [{}]: ".format(bpName)))
@@ -2284,14 +2302,18 @@ class App(ConfigNode):
             status = list(set([vm['loadingStatus'] for vm in app['deployment']['vms']]))
             if len(status) == 1 and 'DONE' in status:
                 break
-            i = 30
+            i = 20
             while i >= 0:
-                print(c.REVERSE("{}".format(i)), end='', file=stderr)
-                stderr.flush()
-                sleep(1)
-                print('\033[2K', end='', file=stderr)
+                if quiet:
+                    sleep(1)
+                else:
+                    print(c.REVERSE("{}".format(i)), end='', file=stderr)
+                    stderr.flush()
+                    sleep(1)
+                    print('\033[2K', end='', file=stderr)
                 i -= 1
-            print(file=stderr)
+            if not quiet:
+                print(file=stderr)
         print(c.green("DONE!\n"))
 
     
@@ -2299,7 +2321,7 @@ class App(ConfigNode):
         if current_param in ['name', 'desc']:
             completions = [a for a in ['@prompt', '@auto']
                            if a.startswith(text)]
-        elif current_param in ['shutdown', 'waitSnapshotCompletion', 'allowExactName']:
+        elif current_param in ['shutdown', 'waitSnapshotCompletion', 'allowExactName', 'quiet']:
             completions = [a for a in ['true', 'false']
                            if a.startswith(text)]
         else:

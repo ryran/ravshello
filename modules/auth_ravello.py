@@ -19,8 +19,19 @@ except:
     raise
 
 
+def quit_login_failed():
+    cfgMesg = cfg.cfgFile.get('unableToLoginAdditionalMsg', None)
+    print(c.RED("  Logging in to Ravello failed!"), file=stderr)
+    print("\nIf you're sure your Ravello credentials are correct, "
+          "try updating ravshello", file=stderr)
+    if cfgMesg: print(cfgMesg, file=stderr)
+    exit(5)
+
+
 def get_username(prompt="Enter username: ", defaultUser=None):
     """Prompt for a username, allowing pre-populated *defaultUser*."""
+    if cfg.opts.neverPromptCreds:
+        quit_login_failed()
     user = raw_input(prompt)
     while not len(user):
         if defaultUser:
@@ -32,6 +43,8 @@ def get_username(prompt="Enter username: ", defaultUser=None):
 
 def get_passphrase(prompt="Enter passphrase: ", defaultPass=None):
     """Prompt for a passphrase, allowing pre-populated *defaultPass*."""
+    if cfg.opts.neverPromptCreds:
+        quit_login_failed()
     passwd = getpass(prompt)
     while not len(passwd):
         if defaultPass:
@@ -50,7 +63,6 @@ def login():
     c.verbose("\nConnecting to Ravello . . .", file=stderr)
     cfgUser = cfg.cfgFile.get('ravelloUser', None)
     cfgPass = cfg.cfgFile.get('ravelloPass', None)
-    cfgMesg = cfg.cfgFile.get('unableToLoginAdditionalMsg', None)
     profiles = cfg.cfgFile.get('userProfiles', {})
     user = passwd = userFrom = profile = None
     # If necessary, get Ravello *username* from configfile or prompt
@@ -89,11 +101,7 @@ def login():
     try:
         rClient.login(rOpt.ravelloUser, rOpt.ravelloPass)
     except:
-        print(c.RED("  Logging in to Ravello failed!"), file=stderr)
-        print("\nIf you're sure your Ravello credentials are correct, "
-              "try updating ravshello", file=stderr)
-        if cfgMesg: print(cfgMesg, file=stderr)
-        exit(5)
+        quit_login_failed()
     print(c.GREEN("  Logged in to Ravello as "), end='', file=stderr)
     if rOpt.enableAdminFuncs:
         print(c.YELLOW("ADMIN"), end="", file=stderr)

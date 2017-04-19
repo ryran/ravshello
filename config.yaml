@@ -83,6 +83,14 @@ eventsOfInterest:
 
 
 ######
+## Setting this boolean true changes the default behavior of prompting for
+## missing Ravello credentials -- instead, ravshello will exit with login error.
+## This can also be set true by use of --never-prompt-creds cmdline option.
+
+#neverPromptCreds: false
+
+
+######
 ## Optionally include additional config file(s). These must be the same format
 ## as above. Keys from included config files will overwrite keys from earlier
 ## files. Inclusion is not recursive (included files don't support `includes`),
