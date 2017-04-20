@@ -20,11 +20,11 @@ except:
 
 
 def quit_login_failed():
-    cfgMesg = cfg.cfgFile.get('unableToLoginAdditionalMsg', None)
-    print(c.RED("  Logging in to Ravello failed!"), file=stderr)
-    print("\nIf you're sure your Ravello credentials are correct, "
-          "try updating ravshello", file=stderr)
-    if cfgMesg: print(cfgMesg, file=stderr)
+    message = cfg.cfgFile.get('unableToLoginMsg',
+        cfg.cfgFile.get('unableToLoginAdditionalMsg',
+            "If you're certain Ravello credentials are correct, try updating ravshello"))
+    print(c.RED("  Logging in to Ravello failed!\n"), file=stderr)
+    print(message, file=stderr)
     exit(5)
 
 
@@ -102,13 +102,14 @@ def login():
         rClient.login(rOpt.ravelloUser, rOpt.ravelloPass)
     except:
         quit_login_failed()
-    print(c.GREEN("  Logged in to Ravello as "), end='', file=stderr)
-    if rOpt.enableAdminFuncs:
-        print(c.YELLOW("ADMIN"), end="", file=stderr)
-        if rOpt.showAllApps:
-            print(" " + c.bgRED("[global app visiblity]"), file=stderr)
+    if rOpt.printWelcome:
+        print(c.GREEN("  Logged in to Ravello as "), end="", file=stderr)
+        if rOpt.enableAdminFuncs:
+            print(c.YELLOW("ADMIN"), end="", file=stderr)
+            if rOpt.showAllApps:
+                print(" " + c.bgRED("[global app visiblity]"), file=stderr)
+            else:
+                print(file=stderr)
         else:
-            print(file=stderr)
-    else:
-        print(c.GREEN("LEARNER"), file=stderr)
+            print(c.GREEN("LEARNER"), file=stderr)
     return rClient

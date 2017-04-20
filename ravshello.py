@@ -166,6 +166,10 @@ def main():
         '-q', '--quiet', dest='enableVerbose', action='store_false',
         help="Hide verbose messages during startup")
     grpU.add_argument(
+        '-Q', '--more-quiet', dest='printWelcome', action='store_false',
+        help=("A superset of the --quiet option; also hides various non-verbose "
+              "welcome messages during startup"))
+    grpU.add_argument(
         '-d', '--debug', dest='enableDebugging', action='store_true',
         help=("Turn on debugging features to help troubleshoot a problem "
               "(critically, this disables some ConfigShell exception-handling "
@@ -213,6 +217,10 @@ def main():
     if rOpt.showHelp:
         p.print_help()
         exit()
+    
+    # Trigger -q if -Q was called
+    if not rOpt.printWelcome:
+        rOpt.enableVerbose = False
     
     # Setup color/verbosity
     c.enableColor = rOpt.enableColor
@@ -284,7 +292,8 @@ def main():
     # Set sshKeyFile var to none if missing
     cfg.cfgFile['sshKeyFile'] = cfg.cfgFile.get('sshKeyFile', None)
     
-    print(c.BOLD("Welcome to {}!".format(cfg.prog)), file=stderr)
+    if rOpt.printWelcome:
+        print(c.BOLD("Welcome to {}!".format(cfg.prog)), file=stderr)
     
     # Liftoff
     # 1.) Establish a local user name to use in ravshello

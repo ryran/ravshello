@@ -43,9 +43,13 @@
 
 
 ######
-## Optionally specify additional text to be displayed when login fails.
+## Optionally specify text to be displayed when login fails. Declare as simple
+## string or as a multiline literal block ("unableToLoginMsg: |") or multiline
+## folded block ("unableToLoginMsg: >"). In any case, if this directive is
+## present, it will replace the default message of:
+## "If you're certain Ravello credentials are correct, try updating ravshello"
 
-#unableToLoginAdditionalMsg: Ohmg contact bob at the helpdesk!
+#unableToLoginMsg: Ohmg contact bob at the helpdesk!
 
 
 ######

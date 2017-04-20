@@ -100,15 +100,16 @@ def launch_directsdk_shell(scriptFile=None, allowScriptedInput=True):
     R = rCache
     vars = globals().copy()
     vars.update(locals())
-    print(dedent("""
-        This is a python shell to provide direct access to the Ravello SDK
-        See SDK @ https://github.com/ravello/python-sdk/blob/master/lib/ravello_sdk.py
-        Objects available for your use:
-          r = rClient = ravello_sdk.RavelloClient()
-          R = rCache = ravello_cache.RavelloCache()
-          c = string_ops
-          p(): print(json.dumps(jsonInput, indent=4))
-          P(): pager(json.dumps(jsonInput, indent=4))"""), file=stderr)
+    if rOpt.printWelcome:
+        print(dedent("""
+            This is a python shell to provide direct access to the Ravello SDK
+            See SDK @ https://github.com/ravello/python-sdk/blob/master/lib/ravello_sdk.py
+            Objects available for your use:
+              r = rClient = ravello_sdk.RavelloClient()
+              R = rCache = ravello_cache.RavelloCache()
+              c = string_ops
+              p(): print(json.dumps(jsonInput, indent=4))
+              P(): pager(json.dumps(jsonInput, indent=4))"""), file=stderr)
     shell = code.InteractiveConsole(vars)
     if scriptFile or allowScriptedInput:
         cmds = cfg.opts.cmdlineArgs
@@ -119,7 +120,8 @@ def launch_directsdk_shell(scriptFile=None, allowScriptedInput=True):
         elif cfg.opts.scriptFile:
             cmds = open(cfg.opts.scriptFile).readlines()
         if cmds:
-            print(file=stderr)
+            if rOpt.printWelcome:
+                print(file=stderr)
             for cmd in [line.rstrip('\n') for line in cmds]:
                 c.debug("Running python line: {}".format(cmd), file=stderr)
                 shell.push(cmd)
@@ -185,29 +187,30 @@ def main():
             print(c.red("Sorry! Only admins are allowed to use {} non-interactively\n".format(cfg.prog)))
             exit(1)
         # Initial usage hints
-        print(dedent("""\
-            {}
-             ┐
-             │ NAVIGATE: Use `{}` and `{}` with tab-completion
-             │ COMMANDS: Use tab-completion to see commands specific to each directory
-             │ GET HELP: Use `{}`
-             │
-             │ Your first time?
-             │   - First: use `{}` command
-             │   - Next: press TAB-TAB to see available commands
-             │   - Next: use `{}` TAB-TAB command to get started
-             │   - Optional: `{}` into new app directory and press TAB-TAB to see commands
-             │   - Optional: use `{}` command to add an hour to the timer
-             └──────────────────────────────────────────────────────────────────────────────
-            """
-            .format(
-                c.BOLD("Instructions:"),
-                c.BOLD('cd'), c.BOLD('ls'),
-                c.BOLD('help'),
-                c.BOLD('cd apps'),
-                c.BOLD('new'),
-                c.BOLD('cd'),
-                c.BOLD('extend_autostop'))), file=stderr)
+        if rOpt.printWelcome:
+            print(dedent("""\
+                {}
+                 ┐
+                 │ NAVIGATE: Use `{}` and `{}` with tab-completion
+                 │ COMMANDS: Use tab-completion to see commands specific to each directory
+                 │ GET HELP: Use `{}`
+                 │
+                 │ Your first time?
+                 │   - First: use `{}` command
+                 │   - Next: press TAB-TAB to see available commands
+                 │   - Next: use `{}` TAB-TAB command to get started
+                 │   - Optional: `{}` into new app directory and press TAB-TAB to see commands
+                 │   - Optional: use `{}` command to add an hour to the timer
+                 └──────────────────────────────────────────────────────────────────────────────
+                """
+                .format(
+                    c.BOLD("Instructions:"),
+                    c.BOLD('cd'), c.BOLD('ls'),
+                    c.BOLD('help'),
+                    c.BOLD('cd apps'),
+                    c.BOLD('new'),
+                    c.BOLD('cd'),
+                    c.BOLD('extend_autostop'))), file=stderr)
         shell.run_interactive(exit_on_error=rOpt.enableDebugging)
         return
     if rOpt.useStdin:
@@ -2041,6 +2044,7 @@ class App(ConfigNode):
         print("(It won't hurt anything if you cancel status loop early with " +
               c.BOLD("Ctrl-c") + ")\n")
         loopCount = 0
+        vmsRepaired = []
         while loopCount <= maxLoops:
             i = intervalSec
             while i >= 0:
@@ -2054,13 +2058,42 @@ class App(ConfigNode):
                 i -= 1
             if not quiet:
                 print()
-            allVmsStarted, allVmsStopped = self.query_status(quiet=quiet)
-            if desiredState == 'STARTED' and allVmsStarted:
-                break
-            if desiredState == 'STOPPED' and allVmsStopped:
-                break
+            app = rClient.get_application(self.appId, aspect='deployment')
+            if app['published']:
+                vmStates = list(set([vm['state'] for vm in app['deployment']['vms']]))
+                if desiredState == 'STARTED' and len(vmStates) == 1 and 'STARTED' in vmStates:
+                    break
+                elif desiredState == 'STOPPED' and len(vmStates) == 1 and 'STOPPED' in vmStates:
+                    break
+                errVms = [vm for vm in app['deployment']['vms'] if vm['state'].startswith('ERROR')]
+                for vm in errVms:
+                    name = vm['name']
+                    state = vm['state']
+                    if vm['id'] in vmsRepaired:
+                        print(c.RED("\nVM {} hardware in {} state despite repair operation!".format(name, state)))
+                        print(c.YELLOW("You should issue a possibly-destructive ") +
+                              c.BOLD("/apps/{}/vms/{}/ reset_to_last_shutdown_state ".format(self.appName, name)) +
+                              c.YELLOW("command"))
+                        return
+                    else:
+                        print(c.YELLOW("\nVM {} hardware in {} state; requesting non-destructive repair ...".format(name, state)))
+                        try:
+                            r.repair_vm(app['id'], vm['id'])
+                        except:
+                            print(c.RED("\nProblem issuing repair operation for VM {}!".format(name)))
+                        else:
+                            vmsRepaired.append(vm['id'])
+                    if desiredState == 'STOPPED' and state == 'STARTED' and vm['id'] in vmsRepaired:
+                        print(c.yellow("\nStopping VM {} after successful repair ...".format(name)))
+                        try:
+                            r.stop_vm(app['id'], vm['id'])
+                        except:
+                            print(c.RED("\nProblem issuing stop operation for VM {}!".format(name)))
+                if not quiet:
+                    self.query_status(app)
+            else:
+                self.print_message_app_not_published()
             loopCount += 1
-        
         print(c.green("All VMs reached '{}' state!\n".format(desiredState)))
         if desiredState == 'STARTED':
             c.verbose(
@@ -2088,57 +2121,47 @@ class App(ConfigNode):
             - VNC web URLs
         """
         print()
-        self.query_status()
-    
-    def query_status(self, quiet=False):
         app = rClient.get_application(self.appId, aspect='deployment')
+        self.query_status(app)
+    
+    def query_status(self, app):
         if not app['published']:
             self.print_message_app_not_published()
-            return None, None
-        # Defaults
-        allVmsAreStarted = False
-        allVmsAreStopped = False
-        vmStates = list(set([vm['state'] for vm in app['deployment']['vms']]))
-        if len(vmStates) == 1 and vmStates[0] == 'STARTED':
-            allVmsAreStarted = True
-        if len(vmStates) == 1 and vmStates[0] == 'STOPPED':
-            allVmsAreStopped = True
-        if not quiet:
-            try:
-                expirationTime = ui.sanitize_timestamp(app['deployment']['expirationTime'])
-            except:
-                expirationTime = None
-            if expirationTime:
-                diff = expirationTime - time()
-                m, s = divmod(expirationTime - time(), 60)
-                expireDateTime = datetime.fromtimestamp(expirationTime)
-                if diff < 0:
-                    autoStopMessage = c.BOLD("were auto-stopped on {}".format(
-                        expireDateTime.strftime('%Y/%m/%d @ %H:%M')))
-                else:
-                    t = "{:.0f}:{:02.0f}".format(m, s)
-                    if m <= 4:
-                        timestring = c.bgRED(t)
-                    elif m <= 15:
-                        timestring = c.RED(t)
-                    elif m <= 30:
-                        timestring = c.YELLOW(t)
-                    else:
-                        timestring = c.GREEN(t)
-                    autoStopMessage = c.BOLD("will auto-stop in {}".format(timestring))
-                    autoStopMessage += c.BOLD(" min at {}".format(expireDateTime.strftime('%H:%M:%S')))
+            return
+        try:
+            expirationTime = ui.sanitize_timestamp(app['deployment']['expirationTime'])
+        except:
+            expirationTime = None
+        if expirationTime:
+            diff = expirationTime - time()
+            m, s = divmod(expirationTime - time(), 60)
+            expireDateTime = datetime.fromtimestamp(expirationTime)
+            if diff < 0:
+                autoStopMessage = c.BOLD("were auto-stopped on {}".format(
+                    expireDateTime.strftime('%Y/%m/%d @ %H:%M')))
             else:
-                autoStopMessage = c.BOLD("never had auto-stop set")
-            # Print our header message
-            region = app['deployment']['regionName'].replace(" ", "-")
-            print(c.BOLD("App VMs in region {} {}".format(region, autoStopMessage)))
+                t = "{:.0f}:{:02.0f}".format(m, s)
+                if m <= 4:
+                    timestring = c.bgRED(t)
+                elif m <= 15:
+                    timestring = c.RED(t)
+                elif m <= 30:
+                    timestring = c.YELLOW(t)
+                else:
+                    timestring = c.GREEN(t)
+                autoStopMessage = c.BOLD("will auto-stop in {}".format(timestring))
+                autoStopMessage += c.BOLD(" min at {}".format(expireDateTime.strftime('%H:%M:%S')))
+        else:
+            autoStopMessage = c.BOLD("never had auto-stop set")
+        # Print our header message
+        region = app['deployment']['regionName'].replace(" ", "-")
+        print(c.BOLD("App VMs in region {} {}".format(region, autoStopMessage)))
+        print()
+        for vm in app['deployment']['vms']:
+            out = get_vm_access_details(vm)[0]
+            print("  ", end="")
+            print("\n  ".join(out))
             print()
-            for vm in app['deployment']['vms']:
-                out = get_vm_access_details(vm)[0]
-                print("  ", end="")
-                print("\n  ".join(out))
-                print()
-        return allVmsAreStarted, allVmsAreStopped
     
     def extend_autostop(self, minutes=60):
         req = {'expirationFromNowSeconds': minutes * 60}
