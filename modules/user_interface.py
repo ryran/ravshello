@@ -2072,7 +2072,9 @@ class App(ConfigNode):
                     if vm['id'] in vmsRepaired:
                         print(c.RED("\nVM {} hardware in {} state despite repair operation!".format(name, state)))
                         print(c.YELLOW("You should issue a possibly-destructive ") +
-                              c.BOLD("/apps/{}/vms/{}/ reset_to_last_shutdown_state ".format(self.appName, name)) +
+                              c.BOLD("/apps/{}/vms/{}/ reset_disks ".format(self.appName, name)) +
+                              c.YELLOW("or") +
+                              c.BOLD("/apps/{}/vms/{}/ redeploy ".format(self.appName, name)) +
                               c.YELLOW("command"))
                         return
                     else:
@@ -3186,26 +3188,57 @@ class Vm(ConfigNode):
         print(c.yellow("\nVM now starting\n"))
         rCache.purge_app_cache(self.appId)
     
-    def ui_command_reset_to_last_shutdown_state(self):
+    def ui_command_reset_disks(self):
         """
-        Reset VM to the state it was in as of last shutdown.
+        Reset VM disks to their most recent saved state.
         
-        Every VM has its disk state automatically snapshotted at shutdown.
-        This command re-publishes the VM using the last snapshot state (which is
-        not necessarily the best working state).
+        The "most recent saved state" of each disk will come from the most recent of:
         
-        To reset a VM to a pristine state (i.e., the state of the VM when the
-        app was originally created), you must first ensure the VM never shuts
-        down ... or make sure you run this command before any shutdown.
+          * when the whole app was last saved to a new blueprint
+          * when the disk was last saved to the disk images library
+          * when the VM was last saved to the VM images library
+          * when the VM was last shutdown
+        
+        If none of those apply (if VM hasn't been shutdown since being published), the
+        most recent state will be that of the disks from original blueprint.
+        
+        For this command to be able to reset a VM to a pristine state (i.e., the state
+        of the VM when the app was originally published), the VM must still be running
+        and must have never been shutdown.
+        
+        See also command: redeploy
+        """
+        if not self.confirm_app_is_published():
+            return
+        try:
+            rClient.reset_disks_vm(self.appId, self.vmId)
+        except:
+            print(c.red("\nProblem resetting VM disks!\n"))
+            raise
+        print(c.yellow("\nVM disk are being reset to most recent saved state!\n"))
+    
+    def ui_command_redeploy(self):
+        """
+        Deletes VM and replaces it with a new copy.
+        
+        The new VM will come from the most recent of:
+        
+          * when the whole app was last saved to a new blueprint
+          * when the VM was last saved to the VM images library
+        
+        If neither of those apply, the most recent state will be that of the disks from
+        original blueprint.
+
+        See also command: reset_disks
         """
         if not self.confirm_app_is_published():
             return
         try:
             rClient.redeploy_vm(self.appId, self.vmId)
         except:
-            print(c.red("\nProblem resetting VM!\n"))
+            print(c.red("\nProblem redploying VM!\n"))
             raise
-        print(c.yellow("\nVM was destroyed and is being re-published from state of last full shutdown"))
+        print(c.yellow("\nVM was destroyed and is being re-published from most recent library state!"))
         print("FQDN should stay the same; VNC URL will change; ssh host key might change\n")
         rCache.purge_app_cache(self.appId)
     
