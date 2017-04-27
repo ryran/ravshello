@@ -2070,28 +2070,28 @@ class App(ConfigNode):
                     name = vm['name']
                     state = vm['state']
                     if vm['id'] in vmsRepaired:
-                        print(c.RED("\nVM {} hardware in {} state despite repair operation!".format(name, state)))
-                        print(c.YELLOW("You should issue a possibly-destructive ") +
-                              c.BOLD("/apps/{}/vms/{}/ reset_disks ".format(self.appName, name)) +
-                              c.YELLOW("or") +
-                              c.BOLD("/apps/{}/vms/{}/ redeploy ".format(self.appName, name)) +
-                              c.YELLOW("command"))
+                        print(c.RED("VM {} hardware in {} state despite repair operation!".format(name, state)))
+                        print(c.YELLOW("You can delete+recreate the VM or the entire app; alternatively, use redeploy:"))
+                        print(c.BOLD("  /apps/{}/vms/{}/ help redeploy\n".format(self.appName, name)))
                         return
                     else:
-                        print(c.YELLOW("\nVM {} hardware in {} state; requesting non-destructive repair ...".format(name, state)))
+                        print(c.YELLOW("VM {} hardware in {} state; requesting non-destructive repair ...".format(name, state)))
                         try:
-                            r.repair_vm(app['id'], vm['id'])
+                            rClient.repair_vm(app['id'], vm['id'])
                         except:
-                            print(c.RED("\nProblem issuing repair operation for VM {}!".format(name)))
+                            print(c.RED("Problem issuing repair operation for VM {}!".format(name)))
                         else:
                             vmsRepaired.append(vm['id'])
                     if desiredState == 'STOPPED' and state == 'STARTED' and vm['id'] in vmsRepaired:
-                        print(c.yellow("\nStopping VM {} after successful repair ...".format(name)))
+                        print(c.yellow("Stopping VM {} after successful repair ...".format(name)))
                         try:
-                            r.stop_vm(app['id'], vm['id'])
+                            rClient.stop_vm(app['id'], vm['id'])
                         except:
-                            print(c.RED("\nProblem issuing stop operation for VM {}!".format(name)))
+                            print(c.RED("Problem issuing stop operation for VM {}!".format(name)))
                 if not quiet:
+                    if errVms:
+                        print()
+                        app = rClient.get_application(self.appId, aspect='deployment')
                     self.query_status(app)
             else:
                 self.print_message_app_not_published()
@@ -3190,21 +3190,24 @@ class Vm(ConfigNode):
     
     def ui_command_reset_disks(self):
         """
-        Reset VM disks to their most recent saved state.
+        Reset VM disks of a VM to their most recent saved state.
         
         The "most recent saved state" of each disk will come from the most recent of:
         
           * when the whole app was last saved to a new blueprint
+          * when the whole VM was last saved to the VM images library
           * when the disk was last saved to the disk images library
-          * when the VM was last saved to the VM images library
           * when the VM was last shutdown
-        
+          
         If none of those apply (if VM hasn't been shutdown since being published), the
-        most recent state will be that of the disks from original blueprint.
+        most recent state will be that of the disks from original blueprint. If the VM
+        wasn't in original blueprint (i.e., was added to published application), the
+        most recent state will be that of the disks from VM or disk image library.
         
-        For this command to be able to reset a VM to a pristine state (i.e., the state
-        of the VM when the app was originally published), the VM must still be running
-        and must have never been shutdown.
+        Note that this command only works with VMs in STARTED state. For this command
+        to be able to reset a VM to a pristine state (i.e., the state of the VM when
+        originally published), the VM must still be running and must have never been
+        stopped or saved to the library.
         
         See also command: redeploy
         """
@@ -3219,16 +3222,25 @@ class Vm(ConfigNode):
     
     def ui_command_redeploy(self):
         """
-        Deletes VM and replaces it with a new copy.
+        Replaces VM with a new copy based on the most recent VM saved state.
         
-        The new VM will come from the most recent of:
+        The "most recent saved state" of each disk will come from the most recent of:
         
           * when the whole app was last saved to a new blueprint
-          * when the VM was last saved to the VM images library
+          * when the whole VM was last saved to the VM images library
+          * when the disk was last saved to the disk images library
+          * when the VM was last shutdown
+          
+        If none of those apply (if VM hasn't been shutdown since being published), the
+        most recent state will be that of the disks from original blueprint. If the VM
+        wasn't in original blueprint (i.e., was added to published application), the
+        most recent state will be that of the disks from VM or disk image library.
         
-        If neither of those apply, the most recent state will be that of the disks from
-        original blueprint.
-
+        This command will succeed under all conditions; however, for this command to be
+        able to reset a VM to a pristine state (i.e., the state of the VM when
+        originally published), the VM must have never been stopped or saved to the
+        library.
+        
         See also command: reset_disks
         """
         if not self.confirm_app_is_published():
@@ -3322,9 +3334,44 @@ class Vm(ConfigNode):
         print(c.yellow("\nAPI 'repair' call was sent; check VM status\n"))
         rCache.purge_app_cache(self.appId)
     
+    def ui_command_set_stoptimeout(self, seconds, publishUpdates='true'):
+        """
+        Set the VM stopTimeOut property in seconds.
+        
+        When unset, this property defaults to a value of 1200 (i.e., 20 minutes).
+        
+        If application is already published, and *publishUpdates* is 'true'
+        (default), the design changes will be immediately published to the
+        cloud.
+        """
+        seconds = self.ui_eval_param(seconds, 'number', 1200)
+        publishUpdates = self.ui_eval_param(publishUpdates, 'bool', True)
+        print()
+        vm = rCache.get_vm(self.appId, self.vmId, aspect='design')
+        vm['stopTimeOut'] = seconds
+        self.update_vm(vm, publishUpdates)
+    
+    def ui_complete_set_stoptimeout(self, parameters, text, current_param):
+        if current_param in ['publishUpdates']:
+            completions = [a for a in ['false', 'true']
+                           if a.startswith(text)]
+        elif current_param in ['seconds']:
+            completions = [a for a in ['150', '300', '600', '1200']
+                           if a.startswith(text)]
+        else:
+            completions = []
+        if len(completions) == 1:
+            return [completions[0] + ' ']
+        else:
+            return completions
+    
     def ui_command_cloudinit_enable(self, enabled='true', publishUpdates='true'):
         """
         Enable or (disable) Cloud-Init for this VM.
+        
+        If application is already published, and *publishUpdates* is 'true'
+        (default), the design changes will be immediately published to the
+        cloud.
         """
         enabled = self.ui_eval_param(enabled, 'bool', True)
         publishUpdates = self.ui_eval_param(publishUpdates, 'bool', True)
@@ -3360,6 +3407,10 @@ class Vm(ConfigNode):
         Configure application to pass a Ravello "Key Pair" (ssh pubkey) to VM.
         
         This requires the VM has Cloud-Init installed.
+        
+        If application is already published, and *publishUpdates* is 'true'
+        (default), the design changes will be immediately published to the
+        cloud.
         """
         keypair = self.ui_eval_param(keypair, 'string', '@prompt')
         publishUpdates = self.ui_eval_param(publishUpdates, 'bool', True)
@@ -3417,6 +3468,10 @@ class Vm(ConfigNode):
         
         *inputFile* must be the path to a file containing cloud-config data
         ("#cloud-config") or a shell script (e.g., "#!/bin/bash").
+        
+        If application is already published, and *publishUpdates* is 'true'
+        (default), the design changes will be immediately published to the
+        cloud.
         """
         noconfirm = self.ui_eval_param(noconfirm, 'bool', False)
         publishUpdates = self.ui_eval_param(publishUpdates, 'bool', True)
