@@ -21,22 +21,33 @@
 
 
 ######
+## Optionally specify a default cost bucket (by name or numeric ID) in which to
+## place all new apps created by ravshello. You will need execute permission on
+## the cost bucket in order to associate an application with it.
+
+#appCostBucket: myCostBucketNameOrId
+
+
+######
 ## Optionally declare MULTIPLE sets of Ravello credentials and map them to
 ## profile names. The names are arbitrary and can be selected by use of
 ## the -u or --user cmdline option. Notes:
 ##  - *ravelloUser* is required.
 ##  - *ravelloPass* is not required. (Will be prompted for pass.)
 ##  - *nickname* is not required.
+##  - *appCostBucket* is not required.
 ##  - *defaultProfile* is not required.
 
 #userProfiles:
 #    bob:
 #        ravelloUser: bob@example.com
 #        ravelloPass: xxxxx
+#        appCostBucket: QA
 #    ana:
 #        ravelloUser: anabanana@example.com
 #        ravelloPass: xxxxx
 #        nickname: ana
+#        appCostBucket: DEV
 #    wow@example:
 #        ravelloUser: wow@example.com
 #    defaultProfile: ana
