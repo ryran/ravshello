@@ -1789,6 +1789,9 @@ class Applications(ConfigNode):
         # Add new app to directory tree
         App("%s" % appName, self, newApp['id'])
         
+        if cfg.appCostBucket:
+            self.get_child(appName).move_to_cost_bucket(cfg.appCostBucket)
+        
         if publish:
             self.get_child(appName).ui_command_publish(region, startAllVms)
         else:
@@ -2384,6 +2387,44 @@ class App(ConfigNode):
         description = "APP available publish locations for /apps/{}".format(self.appName)
         ui.print_obj(rClient.get_application_publish_locations(self.appId),
             description, outputFile, tmpPrefix='publoc_{}'.format(self.appName))
+    
+    def move_to_cost_bucket(self, costBucket):
+        """
+        Move this application to a cost bucket.
+        
+        This operation will fail if your user does not have EXECUTE permissions on a
+        cost bucket with name or ID of *costBucket*.
+        """
+        cb = None
+        buckets = rClient.get_cost_buckets(permissions='execute')
+        if not buckets:
+            print(c.red("Unable to associate app with cost bucket!\n"
+                        "Your user doesn't have execute permission on any cost buckets"))
+            return
+        try:
+            cb = [b for b in buckets if b['id'] == costBucket][0]
+        except:
+            try:
+                cb = [b for b in buckets if b['name'] == costBucket][0]
+            except:
+                if isinstance(costBucket, int):
+                    text = "name or ID"
+                else:
+                    text = "name"
+                print(c.red("Unable to associate app with cost bucket!\n"
+                            "Your user doesn't have execute permission on a cost bucket with {} '{}'"
+                            .format(text, costBucket)))
+                return
+        try:
+            rClient.associate_resource_to_cost_bucket(
+                cost_bucket=cb['id'],
+                resource_details={'resourceId':self.appId, 'resourceType':'application'})
+        except:
+            print(c.red("Unexpected error associating application with cost bucket '{}'!\n"
+                        "Make sure your user has EXECUTE permissions on this cost bucket"
+                        .format(costBucket)))
+        else:
+            print(c.green("Associated new app with cost bucket {}".format(costBucket)))
     
     def ui_command_delete(self, noconfirm='false'):
         """

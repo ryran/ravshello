@@ -6,8 +6,8 @@
 prog = 'ravshello'
 
 # Version info
-__version__ = '1.27.0'
-__date__    = '2017/04/27'
+__version__ = '1.28.0'
+__date__    = '2017/07/15'
 version = "{} v{} last mod {}".format(prog, __version__, __date__)
 
 # Defaults
@@ -33,6 +33,9 @@ opts = None
 
 # This will hold the local username
 user = None
+
+# This will hold the default app cost bucket
+appCostBucket = None
 
 # This will hold the RavelloClient object
 rClient = None
