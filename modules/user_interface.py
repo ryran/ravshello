@@ -137,7 +137,7 @@ def main():
     rOpt = cfg.opts
     user = cfg.user
     if user:
-        appnamePrefix = 'k:{}__'.format(user)
+        appnamePrefix = '{}{}__'.format(cfg.appnameNickPrefix, user)
     else:
         appnamePrefix = ''
     rClient = cfg.rClient

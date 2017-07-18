@@ -3,14 +3,17 @@
 ## In addition, ravshello supports a non-standard "!include" extension, e.g.:
 ##     KEY: !include /PATH/FILE
 ## Such inclusions will be handled recursively so use with care.
-
+##
+## WARNING about quoting strings:
+## YAML doesn't require quoting simple strings but certain characters (e.g., ":"
+## and "#") must be escaped if they're present so it's safer to just use quotes.
+## (Ref: http://yaml.org/spec/1.2/spec.html#id2788859)
 
 ######
-## Optionally specify login credentials for Ravello account to avoid prompting
+## Optionally specify login credentials for Ravello account to avoid prompting.
 
 #ravelloUser: me@example.com
-#ravelloPass: my cr@zy passw0rd, no quotes required
-
+#ravelloPass: 'my cr@zy passw0rd'
 
 ######
 ## If present, *nickname* will be used as the ravshello 'user', overriding the
@@ -19,6 +22,18 @@
 
 #nickname: myNickName
 
+######
+## If *appnameNickPrefix* is omitted, it defaults to "k:" (originally for
+## "kerberos"). This is used in concert with *nickname* to build a prefix for
+## all application names, i.e., a new app created by ravshello will be named:
+##    <appnameNickPrefix><nickname>__<APPLICATION_NAME>
+## Furthermore, in ravshello you will only be able to see apps whose names
+## begin with:
+##    <appnameNickPrefix><nickname>__
+## Though of course in ravshello, it will hide the prefix so you'll only see:
+##    <APPLICATION_NAME>
+
+#appnameNickPrefix: 'k:'
 
 ######
 ## Optionally specify a default cost bucket (by name or numeric ID) in which to
@@ -27,7 +42,6 @@
 
 #appCostBucket: myCostBucketNameOrId
 
-
 ######
 ## Optionally declare MULTIPLE sets of Ravello credentials and map them to
 ## profile names. The names are arbitrary and can be selected by use of
@@ -35,6 +49,7 @@
 ##  - *ravelloUser* is required.
 ##  - *ravelloPass* is not required. (Will be prompted for pass.)
 ##  - *nickname* is not required.
+##  - *appnameNickPrefix* is not required.
 ##  - *appCostBucket* is not required.
 ##  - *defaultProfile* is not required.
 
@@ -43,15 +58,16 @@
 #        ravelloUser: bob@example.com
 #        ravelloPass: xxxxx
 #        appCostBucket: QA
+#        appnameNickPrefix: 'QA:'
 #    ana:
 #        ravelloUser: anabanana@example.com
 #        ravelloPass: xxxxx
 #        nickname: ana
 #        appCostBucket: DEV
+#        appnameNickPrefix: 'DEV:'
 #    wow@example:
 #        ravelloUser: wow@example.com
 #    defaultProfile: ana
-
 
 ######
 ## Optionally specify text to be displayed when login fails. Declare as simple
@@ -62,13 +78,11 @@
 
 #unableToLoginMsg: Ohmg contact bob at the helpdesk!
 
-
 ######
 ## If present, *sshKeyFile* is integrated into the ssh command reported to the
 ## user by ravshello's query_app_status command.
 
 #sshKeyFile: /expected/path/to/ssh/priv/key
-
 
 ######
 ## If present, *eventsOfInterest* overrides rav-notify's default list of
@@ -84,7 +98,6 @@ eventsOfInterest:
     - VM_SNAPSHOTTING_AFTER_STOP
     - VM_FINISHED_SNAPSHOTTING
 
-
 ######
 ## If present, each cmdline in *preRunCommands* will be executed prior to
 ## any cmds present on argv and prior to entering the interactive shell but
@@ -96,14 +109,12 @@ eventsOfInterest:
 #    - ls
 #    - (ADD AS MANY COMMANDS AS YOU WANT)
 
-
 ######
 ## Setting this boolean true changes the default behavior of prompting for
 ## missing Ravello credentials -- instead, ravshello will exit with login error.
 ## This can also be set true by use of --never-prompt-creds cmdline option.
 
 #neverPromptCreds: false
-
 
 ######
 ## Optionally include additional config file(s). These must be the same format

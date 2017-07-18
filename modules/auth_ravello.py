@@ -65,8 +65,9 @@ def login():
     cfgPass = cfg.cfgFile.get('ravelloPass', None)
     profiles = cfg.cfgFile.get('userProfiles', {})
     user = passwd = userFrom = profile = None
-    # Set default cb
+    # Set default cb & app prefix
     cfg.appCostBucket = cfg.cfgFile.get('appCostBucket', None)
+    cfg.appnameNickPrefix = cfg.cfgFile.get('appnameNickPrefix', None)
     # If necessary, get Ravello *username* from configfile or prompt
     try:
         profile = profiles[rOpt.ravelloUser]
@@ -89,11 +90,13 @@ def login():
     if userFrom == 'profile':
         try:
             cfg.appCostBucket = profile['appCostBucket']
+            cfg.appnameNickPrefix = profile['appnameNickPrefix']
         except:
             pass
     elif userFrom == 'defaultProfile':
         try:
             cfg.appCostBucket = profiles[profiles['defaultProfile']]['appCostBucket']
+            cfg.appnameNickPrefix = profiles[profiles['defaultProfile']]['appnameNickPrefix']
         except:
             pass
     # If necessary, get Ravello *password* from configfile or prompt
