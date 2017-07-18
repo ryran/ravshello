@@ -134,7 +134,8 @@ def main():
               "(nickname is normally determined from the system user name "
               "and is used to hide applications that don't start with "
               "'k:NICK__'; any apps created will also have that tag prefixed "
-              "to their name)"))
+              "to their name; see also 'nickname' and 'appnameNickPrefix' "
+              "config directives in /usr/share/{}/config.yaml)".format(cfg.prog)))
     grpU_0.add_argument(
         '--prompt-nick', dest='promptNickname', action='store_true',
         help="Prompt for nickname to use for app-filtering")
