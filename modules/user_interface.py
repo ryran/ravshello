@@ -2063,11 +2063,15 @@ class App(ConfigNode):
                 print()
             app = rClient.get_application(self.appId, aspect='deployment')
             if app['published']:
-                vmStates = list(set([vm['state'] for vm in app['deployment']['vms']]))
-                if desiredState == 'STARTED' and len(vmStates) == 1 and 'STARTED' in vmStates:
-                    break
-                elif desiredState == 'STOPPED' and len(vmStates) == 1 and 'STOPPED' in vmStates:
-                    break
+                if desiredState == 'STARTED':
+                    groupsNoAutostart = [g['id'] for g in app['deployment']['vmOrderGroups'] if g.get('skipStartupSequence', False)]
+                    vmStates = list(set([vm['state'] for vm in app['deployment']['vms'] if vm['vmOrderGroupId'] not in groupsNoAutostart]))
+                    if len(vmStates) == 1 and 'STARTED' in vmStates:
+                        break
+                elif desiredState == 'STOPPED':
+                    vmStates = list(set([vm['state'] for vm in app['deployment']['vms']]))
+                    if len(vmStates) == 1 and 'STOPPED' in vmStates:
+                        break
                 errVms = [vm for vm in app['deployment']['vms'] if vm['state'].startswith('ERROR')]
                 for vm in errVms:
                     name = vm['name']
