@@ -278,7 +278,7 @@ def get_vm_access_details(vm):
     nics = []
     # Compile and print details on each network interface
     for nic in vm.get('networkConnections', []):
-        n = {'name': nic['name'], 'publicIP': '', 'publicIPtype': ''}
+        n = {'name': nic.get('name', "(no name)"), 'publicIP': '', 'publicIPtype': ''}
         internal = None
         ip_Additional = []
         fqdn = ''
@@ -322,7 +322,7 @@ def get_vm_access_details(vm):
                         vm['ssh']['port'] = " -p {}".format(svc['externalPort'])
         n['services'] = services
         # Finally, print:
-        out.append("   NIC {}".format(nic['name']))
+        out.append("   NIC {}".format(n['name']))
         out.append("     Internal IP:    {}".format(internal))
         for ip in ip_Additional:
             out.append("     Internal IP:    {}".format(ip))
