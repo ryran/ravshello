@@ -278,7 +278,7 @@ def get_vm_access_details(vm):
     nics = []
     # Compile and print details on each network interface
     for nic in vm.get('networkConnections', []):
-        n = {'name': nic['name'], 'publicIP': '', 'publicIPtype': ''}
+        n = {'name': nic.get('name', "(no name)"), 'publicIP': '', 'publicIPtype': ''}
         internal = None
         ip_Additional = []
         fqdn = ''
@@ -322,7 +322,7 @@ def get_vm_access_details(vm):
                         vm['ssh']['port'] = " -p {}".format(svc['externalPort'])
         n['services'] = services
         # Finally, print:
-        out.append("   NIC {}".format(nic['name']))
+        out.append("   NIC {}".format(n['name']))
         out.append("     Internal IP:    {}".format(internal))
         for ip in ip_Additional:
             out.append("     Internal IP:    {}".format(ip))
@@ -982,7 +982,7 @@ class Billing(ConfigNode):
             except:
                 upTime = None
             if sortBy == 'nick':
-                if appName.startswith('k:'):
+                if appName.startswith(cfg.appnameNickPrefix):
                     user, appName = appName.split('__', 1)
                     user = user.split(':')[1]
                 else:
@@ -1697,7 +1697,7 @@ class Applications(ConfigNode):
                 description = bp['description']
             except:
                 description = ''
-            if is_admin() or any(tag in description for tag in cfg.learnerBlueprintTag) or '#k:{}'.format(user) in description:
+            if is_admin() or any(tag in description for tag in cfg.learnerBlueprintTag) or '#{}{}'.format(cfg.appnameNickPrefix, user) in description:
                 allowedBlueprints.append(bp['name'])
         if not allowedBlueprints:
             print(c.red("\nThere are no blueprints available for you to base an application on!\n"))
@@ -1806,7 +1806,7 @@ class Applications(ConfigNode):
                     description = bp['description']
                 except:
                     description = ''
-                if is_admin() or any(tag in description for tag in cfg.learnerBlueprintTag) or '#k:{}'.format(user) in description:
+                if is_admin() or any(tag in description for tag in cfg.learnerBlueprintTag) or '#{}{}'.format(cfg.appnameNickPrefix, user) in description:
                     allowedBlueprints.append(bp['name'])
             completions = [a for a in allowedBlueprints
                            if a.startswith(text)]
@@ -1831,7 +1831,7 @@ class Applications(ConfigNode):
                         description = bp['description']
                     except:
                         description = ''
-                    if is_admin() or any(tag in description for tag in cfg.learnerBlueprintTag) or '#k:{}'.format(user) in description:
+                    if is_admin() or any(tag in description for tag in cfg.learnerBlueprintTag) or '#{}{}'.format(cfg.appnameNickPrefix, user) in description:
                         allowedBlueprints[bp['name']] = bp['id']
                 try:
                     bpid = allowedBlueprints[blueprint]
@@ -2063,11 +2063,15 @@ class App(ConfigNode):
                 print()
             app = rClient.get_application(self.appId, aspect='deployment')
             if app['published']:
-                vmStates = list(set([vm['state'] for vm in app['deployment']['vms']]))
-                if desiredState == 'STARTED' and len(vmStates) == 1 and 'STARTED' in vmStates:
-                    break
-                elif desiredState == 'STOPPED' and len(vmStates) == 1 and 'STOPPED' in vmStates:
-                    break
+                if desiredState == 'STARTED':
+                    groupsNoAutostart = [g['id'] for g in app['deployment']['vmOrderGroups'] if g.get('skipStartupSequence', False)]
+                    vmStates = list(set([vm['state'] for vm in app['deployment']['vms'] if vm['vmOrderGroupId'] not in groupsNoAutostart]))
+                    if len(vmStates) == 1 and 'STARTED' in vmStates:
+                        break
+                elif desiredState == 'STOPPED':
+                    vmStates = list(set([vm['state'] for vm in app['deployment']['vms']]))
+                    if len(vmStates) == 1 and 'STOPPED' in vmStates:
+                        break
                 errVms = [vm for vm in app['deployment']['vms'] if vm['state'].startswith('ERROR')]
                 for vm in errVms:
                     name = vm['name']
@@ -2599,7 +2603,7 @@ class App(ConfigNode):
         
         The *addUserPrefix* option will only be consulted when using
         append=false. With addUserPrefix=true, ravshello will add the standard
-        "k:<USER>__" prefix to the provided app name (if it's missing).
+        "<NICKPREFIX>:<NICKNAME>__" to the provided app name (if it's missing).
         
         With name=@auto (regardless of *append* & *addUserPrefix*), the string
         "_<N>" will be appended to the application's current name -- where <N>
