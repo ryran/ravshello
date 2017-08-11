@@ -2301,20 +2301,20 @@ class App(ConfigNode):
             name = bpName
         elif name == '@auto':
             name = bpName
+        tagCreatedWithByFrom = "[Created w/{} {} by {} from app '{}']".format(cfg.prog, cfg.__version__, user, self.appName)
         # Ensure there's not already a bp with that name
         if not allowExactName:
             name = ravello_sdk.new_name(rCache.get_bps(myOrgOnly=True), name + '_')
         if desc == '@prompt':
             desc = raw_input(c.CYAN("\nOptionally enter a description for your new app: "))
             if len(desc):
-                desc += ' '
+                desc += " {}".format(tagCreatedWithByFrom)
             else:
-                desc = ''
+                desc = tagCreatedWithByFrom
         elif desc == '@auto':
-            desc = ''
+            desc = rCache.get_app(self.appId)['description']
         else:
-            desc += ' '
-        desc += "[Created w/{} {} by {} from app '{}']".format(cfg.prog, cfg.__version__, user, self.appName)
+            desc += " {}".format(tagCreatedWithByFrom)
         req = {'applicationId': self.appId, 'blueprintName': name, 'offline': shutdown, 'description': desc}
         print(c.yellow("\nSaving blueprint from application . . . "), end="")
         stdout.flush()
