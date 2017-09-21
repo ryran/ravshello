@@ -6,8 +6,8 @@
 prog = 'ravshello'
 
 # Version info
-__version__ = '1.30.1'
-__date__    = '2017/08/11'
+__version__ = '1.31.0'
+__date__    = '2017/09/20'
 version = "{} v{} last mod {}".format(prog, __version__, __date__)
 
 # Defaults

@@ -2248,7 +2248,7 @@ class App(ConfigNode):
         obj = rClient.get_application(self.appId, aspect=aspect)
         ui.print_obj(obj, description, outputFile, tmpPrefix=self.appName)
     
-    def ui_command_save_blueprint(self, name='@prompt', desc='@prompt', shutdown='true',
+    def ui_command_save_blueprint(self, name='@prompt', desc='@prompt', offline='true',
             waitSnapshotCompletion='true', allowExactName='false', quiet='false'):
         """
         Interactively create a new blueprint from application.
@@ -2261,17 +2261,18 @@ class App(ConfigNode):
         multiple arguments (i.e., you cannot pass multiple words with spaces,
         even if you use quotes).
 
-        *shutdown* defaults to 'true', in which case it will ensure the app
-        is stopped prior to taking the snapshot. This is of course
-        recommended -- taking snapshots of running machines is not a good
-        idea.
+        *offline* defaults to 'true', in which case Ravello will stop each VM
+        prior to snapshotting and then will start each VM back up when finished.
+        With offline=false, you can take snapshots of a running app, but as with
+        many VM technologies, that's not really a good idea. If you're going to
+        use offline=false, you should manually stop the app yourself first.
         
         *waitSnapshotCompletion* defaults to 'true', in which case the command
         will not return until each VM's 'loadingStatus' attribute has returned
         to the 'DONE' state. (Status will be checked on a loop every 20sec.)
-        Note that each VM will not respond to start commands until it returns
-        to DONE state (at least for offline [shutdown=true] snapshots), so
-        using waitSnapshotCompletion=true is a good idea.
+        Note that VMs will likely not respond to start commands until their
+        loadingStatus returns to DONE state, so using waitSnapshotCompletion=true
+        is a good idea (especially if you're using offline=false).
         
         Also note that with the default behavior of allowExactName=false, a
         unique number will be appended to the end of the requested BP name in
@@ -2280,7 +2281,7 @@ class App(ConfigNode):
         name = self.ui_eval_param(name, 'string', '@prompt')
         desc = self.ui_eval_param(desc, 'string', '@prompt')
         waitSnapshotCompletion = self.ui_eval_param(waitSnapshotCompletion, 'bool', True)
-        shutdown = self.ui_eval_param(shutdown, 'bool', True)
+        offline = self.ui_eval_param(offline, 'bool', True)
         allowExactName = self.ui_eval_param(allowExactName, 'bool', False)
         quiet = self.ui_eval_param(quiet, 'bool', False)
         bpName = c.replace_bad_chars_with_underscores(rCache.get_app(self.appId)['name'])
@@ -2315,7 +2316,7 @@ class App(ConfigNode):
             desc = rCache.get_app(self.appId)['description']
         else:
             desc += " {}".format(tagCreatedWithByFrom)
-        req = {'applicationId': self.appId, 'blueprintName': name, 'offline': shutdown, 'description': desc}
+        req = {'applicationId': self.appId, 'blueprintName': name, 'offline': offline, 'description': desc}
         print(c.yellow("\nSaving blueprint from application . . . "), end="")
         stdout.flush()
         # Attempt create request!
@@ -2329,9 +2330,10 @@ class App(ConfigNode):
         if not waitSnapshotCompletion:
             return
         print(c.yellow("Waiting for all VMs to finish snapshotting . . ."))
+        sleep(10)
         while 1:
-            app = rClient.get_application(self.appId, aspect='deployment')
-            status = list(set([vm['loadingStatus'] for vm in app['deployment']['vms']]))
+            bp = rClient.get_blueprint(newBp['id'])
+            status = list(set([vm['loadingStatus'] for vm in bp['design']['vms']]))
             if len(status) == 1 and 'DONE' in status:
                 break
             i = 20
@@ -2353,7 +2355,7 @@ class App(ConfigNode):
         if current_param in ['name', 'desc']:
             completions = [a for a in ['@prompt', '@auto']
                            if a.startswith(text)]
-        elif current_param in ['shutdown', 'waitSnapshotCompletion', 'allowExactName', 'quiet']:
+        elif current_param in ['offline', 'waitSnapshotCompletion', 'allowExactName', 'quiet']:
             completions = [a for a in ['true', 'false']
                            if a.startswith(text)]
         else:
