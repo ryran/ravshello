@@ -2249,7 +2249,7 @@ class App(ConfigNode):
         ui.print_obj(obj, description, outputFile, tmpPrefix=self.appName)
     
     def ui_command_save_blueprint(self, name='@prompt', desc='@prompt', offline='true',
-            waitSnapshotCompletion='true', allowExactName='false', quiet='false'):
+            waitSnapshotCompletion='true', allowExactName='false', quiet='false', force='false'):
         """
         Interactively create a new blueprint from application.
         
@@ -2274,6 +2274,13 @@ class App(ConfigNode):
         loadingStatus returns to DONE state, so using waitSnapshotCompletion=true
         is a good idea (especially if you're using offline=false).
         
+        *force* defaults to 'false', in which case we will inspect current state
+        of the application VMs prior to taking the snapshot -- i.e., we will wait
+        until all VMs have reached either STARTED or STOPPED state so that we
+        can make sure we're not taking a snapshot at the same time Ravello is
+        making one of its automatic snapshot-after-shutdown snapshots. To disable
+        this logic, use force=true. 
+        
         Also note that with the default behavior of allowExactName=false, a
         unique number will be appended to the end of the requested BP name in
         order to avoid name collisions.
@@ -2284,6 +2291,7 @@ class App(ConfigNode):
         offline = self.ui_eval_param(offline, 'bool', True)
         allowExactName = self.ui_eval_param(allowExactName, 'bool', False)
         quiet = self.ui_eval_param(quiet, 'bool', False)
+        force = self.ui_eval_param(force, 'bool', False)
         bpName = c.replace_bad_chars_with_underscores(rCache.get_app(self.appId)['name'])
         if name == '@prompt':
             a = raw_input(c.CYAN("\nEnter a name for the new blueprint [{}]: ".format(bpName)))
@@ -2316,6 +2324,49 @@ class App(ConfigNode):
             desc = rCache.get_app(self.appId)['description']
         else:
             desc += " {}".format(tagCreatedWithByFrom)
+        # Wait for all VMs to get to one consolidated state (i.e., STARTED or STOPPED).
+        # If all VMs are stopped, wait a few seconds and then start a loop-check
+        # to ensure any automatic snapshot-after-shutdown has finished.
+        if not force:
+            loopCount = 0
+            stoppedLoopCount = 0
+            goodLoops = 0
+            while 1:
+                vms = rClient.get_application(self.appId, aspect='deployment')['deployment']['vms']
+                states = set([vm['state'] for vm in vms])
+                loadingStatuses = set([vm['loadingStatus'] for vm in vms])
+                if len(states) == 1:
+                    if 'STARTED' in states:
+                        # print(c.blue("DEBUG: All VMs in STARTED state"))
+                        break
+                    elif 'STOPPED' in states:
+                        # print(c.blue("DEBUG: All VMs in STOPPED state"))
+                        # print(c.blue([(vm['name'], vm['loadingStatus']) for vm in vms]))
+                        loopCount = 0
+                        stoppedLoopCount += 1
+                        if stoppedLoopCount == 1:
+                            # Add a little sleep to ensure Ravello has had a chance to kick off
+                            # the automatic snapshot-after-shutdown operation -- don't want to compete.
+                            pass
+                        elif len(loadingStatuses) == 1 and 'DONE' in loadingStatuses:
+                            goodLoops += 1
+                            # print(c.blue("DEBUG: All VMs' loadingStatus=DONE"))
+                            if goodLoops == 2:
+                                break
+                            else:
+                                # print(c.blue("DEBUG: Need 2 good loops in a row"))
+                                pass
+                        elif stoppedLoopCount == 2:
+                            print(c.yellow("Waiting for auto snapshot-after-shutdown to finish . . ."))
+                else:
+                    stoppedLoopCount = 0
+                    loopCount += 1
+                    if loopCount == 1:
+                        print(c.yellow("Waiting for all VMs to reach common state (STOPPED or STARTED) . . ."))
+                # print(c.blue("DEBUG: Sleeping for 5 sec"))
+                sleep(5)
+            # print(c.blue("DEBUG: Final 20 sec sleep"))
+            sleep(20)
         req = {'applicationId': self.appId, 'blueprintName': name, 'offline': offline, 'description': desc}
         print(c.yellow("\nSaving blueprint from application . . . "), end="")
         stdout.flush()
@@ -2330,13 +2381,25 @@ class App(ConfigNode):
         if not waitSnapshotCompletion:
             return
         print(c.yellow("Waiting for all VMs to finish snapshotting . . ."))
-        sleep(10)
+        # print(c.blue("DEBUG: Sleeping for 5 sec"))
+        sleep(5)
+        goodLoops = 0
         while 1:
             bp = rClient.get_blueprint(newBp['id'])
-            status = list(set([vm['loadingStatus'] for vm in bp['design']['vms']]))
-            if len(status) == 1 and 'DONE' in status:
-                break
-            i = 20
+            loadingStatus = set([vm['loadingStatus'] for vm in bp['design']['vms']])
+            # print(c.blue([(vm['name'], vm['loadingStatus']) for vm in bp['design']['vms']]))
+            if len(loadingStatus) == 1 and 'DONE' in loadingStatus:
+                # print(c.blue("DEBUG: All blueprint VMs' loadingStatus=DONE"))
+                goodLoops += 1
+                if goodLoops == 2:
+                    break
+                else:
+                    # print(c.blue("DEBUG: Need 2 good loops in a row"))
+                    pass
+            else:
+                goodLoops = 0
+            # print(c.blue("DEBUG: Sleeping 5 sec"))
+            i = 5
             while i >= 0:
                 if quiet:
                     sleep(1)
@@ -2348,6 +2411,8 @@ class App(ConfigNode):
                 i -= 1
             if not quiet:
                 print(file=stderr)
+        # print(c.blue("DEBUG: Final 20 sec sleep"))
+        sleep(20)
         print(c.green("DONE!\n"))
 
     
@@ -2355,7 +2420,7 @@ class App(ConfigNode):
         if current_param in ['name', 'desc']:
             completions = [a for a in ['@prompt', '@auto']
                            if a.startswith(text)]
-        elif current_param in ['offline', 'waitSnapshotCompletion', 'allowExactName', 'quiet']:
+        elif current_param in ['offline', 'waitSnapshotCompletion', 'allowExactName', 'quiet', 'force']:
             completions = [a for a in ['true', 'false']
                            if a.startswith(text)]
         else:
