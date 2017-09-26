@@ -167,6 +167,7 @@ Print 0
 Print C "\nDownloading rsaw's stable + modified fork of configshell_fb"
 Print b
 git clone https://github.com/ryran/configshell-fb.git ${dir}/rsaw-configshell-fb
+(cd ${dir}/rsaw-configshell-fb; git checkout ravshello-stable)
 ln -s ../rsaw-configshell-fb/configshell_fb ${dir}/modules/configshell_fb
 Print 0
 
