@@ -1472,7 +1472,20 @@ class Bp(ConfigNode):
         print()
         outputFile = self.ui_eval_param(outputFile, 'string', '@EDITOR')
         description = "BP available publish locations for /blueprints/{}".format(self.bpName)
-        ui.print_obj(rClient.get_blueprint_publish_locations(self.bpId),
+        pubLocations = [r for r in rClient.get_blueprint_publish_locations(self.bpId)
+                        if not r['deprecated']]
+        # BMC blueprint?
+        bpDescription = rCache.get_bp(self.bpId).get('description')
+        # Remove bmc regions or remove everything BUT bmc regions
+        if bpDescription and any(tag in bpDescription for tag in cfg.bmcBlueprintTag):
+            # Is BMC blueprint
+            pubLocations = [r for r in pubLocations
+                            if r['regionName'] in cfg.bmcRegionNames]
+        else:
+            # Is not BMC blueprint
+            pubLocations = [r for r in pubLocations
+                            if not r['regionName'] in cfg.bmcRegionNames]
+        ui.print_obj(pubLocations,
             description, outputFile, tmpPrefix='publoc_{}'.format(self.bpName))
     
     def ui_command_print_def(self, outputFile='@EDITOR'):
@@ -1817,7 +1830,7 @@ class Applications(ConfigNode):
             completions = [a for a in ['true', 'false']
                            if a.startswith(text)]
         elif current_param == 'region':
-            L = ['@prompt', '@auto']
+            L = ['@prompt']
             try:
                 blueprint = parameters['blueprint']
             except:
@@ -1834,13 +1847,27 @@ class Applications(ConfigNode):
                     if is_admin() or any(tag in description for tag in cfg.learnerBlueprintTag) or '#{}{}'.format(cfg.appnameNickPrefix, user) in description:
                         allowedBlueprints[bp['name']] = bp['id']
                 try:
-                    bpid = allowedBlueprints[blueprint]
+                    bpId = allowedBlueprints[blueprint]
                 except:
                     completions = [a for a in L
                                    if a.startswith(text)]
                 else:
-                    pubLocations = [loc for loc in rClient.get_blueprint_publish_locations(bpid)
-                                        if not loc['deprecated']]
+                    pubLocations = [r for r in rClient.get_blueprint_publish_locations(bpId)
+                                    if not r['deprecated']]
+                    # BMC blueprint?
+                    bpDescription = rCache.get_bp(bpId).get('description')
+                    # Remove bmc regions or remove everything BUT bmc regions
+                    if bpDescription and any(tag in bpDescription for tag in cfg.bmcBlueprintTag):
+                        # Is BMC blueprint
+                        pubLocations = [r for r in pubLocations
+                                        if r['regionName'] in cfg.bmcRegionNames]
+                    else:
+                        # Is not BMC blueprint
+                        pubLocations = [r for r in pubLocations
+                                        if not r['regionName'] in cfg.bmcRegionNames]
+                        # Somewhat ironically, we only add cost-optimized option for admins
+                        if is_admin():
+                            pubLocations.insert(0, {'regionName': "@auto", 'regionDisplayName': "@auto"})
                     for p in pubLocations:
                         L.append(p['regionDisplayName'].replace(" ", "-"))
                     completions = [a for a in L
@@ -2456,7 +2483,21 @@ class App(ConfigNode):
         print()
         outputFile = self.ui_eval_param(outputFile, 'string', '@EDITOR')
         description = "APP available publish locations for /apps/{}".format(self.appName)
-        ui.print_obj(rClient.get_application_publish_locations(self.appId),
+        pubLocations = [r for r in rClient.get_application_publish_locations(self.appId)
+                        if not r['deprecated']]
+        # BMC blueprint?
+        bpId = rCache.get_app(self.appId)['baseBlueprintId']
+        bpDescription = rCache.get_bp(bpId).get('description')
+        # Remove bmc regions or remove everything BUT bmc regions
+        if bpDescription and any(tag in bpDescription for tag in cfg.bmcBlueprintTag):
+            # Is BMC blueprint
+            pubLocations = [r for r in pubLocations
+                            if r['regionName'] in cfg.bmcRegionNames]
+        else:
+            # Is not BMC blueprint
+            pubLocations = [r for r in pubLocations
+                            if not r['regionName'] in cfg.bmcRegionNames]
+        ui.print_obj(pubLocations,
             description, outputFile, tmpPrefix='publoc_{}'.format(self.appName))
     
     def move_to_cost_bucket(self, costBucket):
@@ -2654,9 +2695,24 @@ class App(ConfigNode):
     
     def ui_complete_publish(self, parameters, text, current_param):
         if current_param == 'region':
-            L = ['@prompt', '@auto']
+            L = ['@prompt']
             pubLocations = [r for r in rClient.get_application_publish_locations(self.appId)
                             if not r['deprecated']]
+            # Determine whether this app came from a BMC blueprint
+            bpId = rCache.get_app(self.appId)['baseBlueprintId']
+            bpDescription = rCache.get_bp(bpId).get('description')
+            # Remove bmc regions or remove everything BUT bmc regions
+            if bpDescription and any(tag in bpDescription for tag in cfg.bmcBlueprintTag):
+                # Is BMC blueprint
+                pubLocations = [r for r in pubLocations
+                                if r['regionName'] in cfg.bmcRegionNames]
+            else:
+                # Is not BMC blueprint
+                pubLocations = [r for r in pubLocations
+                                if not r['regionName'] in cfg.bmcRegionNames]
+                # Somewhat ironically, we only add cost-optimized option for admins
+                if is_admin():
+                    pubLocations.insert(0, {'regionName': "@auto", 'regionDisplayName': "@auto"})
             for p in pubLocations:
                 L.append(p['regionDisplayName'].replace(" ", "-"))
             completions = [a for a in L
