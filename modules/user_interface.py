@@ -2588,18 +2588,30 @@ class App(ConfigNode):
                 print(c.BOLD("    /apps/{}/ start\n".format(self.appName)))
                 return
         # Choosing time
-        pubLocations = [loc for loc in rClient.get_application_publish_locations(self.appId)
-                            if not loc['deprecated']]
+        pubLocations = [r for r in rClient.get_application_publish_locations(self.appId)
+                        if not r['deprecated']]
+        # Determine whether this app came from a BMC blueprint
+        bpId = rCache.get_app(self.appId)['baseBlueprintId']
+        bpDescription = rCache.get_bp(bpId).get('description')
+        # Remove bmc regions or remove everything BUT bmc regions
+        if bpDescription and any(tag in bpDescription for tag in cfg.bmcBlueprintTag):
+            # Is BMC blueprint
+            pubLocations = [r for r in pubLocations
+                            if r['regionName'] in cfg.bmcRegionNames]
+        else:
+            # Is not BMC blueprint
+            pubLocations = [r for r in pubLocations
+                            if not r['regionName'] in cfg.bmcRegionNames]
+            # Somewhat ironically, we only add cost-optimized option for admins
+            if is_admin():
+                pubLocations.insert(0, {'regionName': "@auto", 'regionDisplayName': "@auto"})
         # Replace spaces in displayName with dashes
-        for loc in pubLocations:
-            loc['regionDisplayName'] = loc['regionDisplayName'].replace(" ", "-")
-        # Somewhat ironically, we only add cost-optimized option for admins
-        if is_admin():
-            pubLocations.insert(0, {'regionName': "@auto", 'regionDisplayName': "@auto"})
+        for r in pubLocations:
+            r['regionDisplayName'] = r['regionDisplayName'].replace(" ", "-")
         if region == '@prompt':
             print(c.BOLD("\nAvailable publish locations:"))
-            for i, loc in enumerate(pubLocations):
-                print("  {})  {}".format(c.cyan(i), loc['regionDisplayName']))
+            for i, r in enumerate(pubLocations):
+                print("  {})  {}".format(c.cyan(i), r['regionDisplayName']))
             # Prompt for provider selection
             selection = ui.prompt_for_number(
                 c.CYAN("\nSelect cloud region in which to provision your VMs by entering a number: "),
@@ -2612,10 +2624,10 @@ class App(ConfigNode):
         elif region == '@auto':
             optimizationLevel = 'COST_OPTIMIZED'
         else:
-            for i, loc in enumerate(pubLocations):
-                if region in [loc['regionName'], loc['regionDisplayName']]:
+            for i, r in enumerate(pubLocations):
+                if region in [r['regionName'], r['regionDisplayName']]:
                     optimizationLevel = 'PERFORMANCE_OPTIMIZED'
-                    preferredRegion = loc['regionName']
+                    preferredRegion = r['regionName']
                     break
             else:
                 print(c.RED("Invalid region specified!\n"))
@@ -2643,8 +2655,8 @@ class App(ConfigNode):
     def ui_complete_publish(self, parameters, text, current_param):
         if current_param == 'region':
             L = ['@prompt', '@auto']
-            pubLocations = [loc for loc in rClient.get_application_publish_locations(self.appId)
-                                if not loc['deprecated']]
+            pubLocations = [r for r in rClient.get_application_publish_locations(self.appId)
+                            if not r['deprecated']]
             for p in pubLocations:
                 L.append(p['regionDisplayName'].replace(" ", "-"))
             completions = [a for a in L
