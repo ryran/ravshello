@@ -79,6 +79,12 @@
 #unableToLoginMsg: Ohmg contact bob at the helpdesk!
 
 ######
+## If present, *maxClientRetries* is passed to RavelloClient(). See --retries in
+## help page for full explanation.
+
+#maxClientRetries: 3
+
+######
 ## If present, *sshKeyFile* is integrated into the ssh command reported to the
 ## user by ravshello's query_app_status command.
 

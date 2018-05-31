@@ -146,10 +146,12 @@ def main():
               "and set exit code '5' (note that using this will override an "
               "explicit 'neverPromptCreds=false' setting from a config file)"))
     grpU.add_argument(
-        '-r', '--retries', dest='maxClientRetries', metavar='NUM', type=int, default=3,
-        help=("Raise/lower the http retries setting (default: 3) of ravello_sdk's "
+        '-r', '--retries', dest='maxClientRetries', metavar='NUM', type=int,
+        help=("Raise/lower the http retries setting (default: {}) of ravello_sdk's "
               "RavelloClient() object, which has retry logic for when a request "
-              "returns http status 401/429, times out, or raises ValueError"))
+              "returns http status 401/429, times out, or raises ValueError "
+              "(note that using this will override an explicit 'maxClientRetries' "
+              "setting from a config file)".format(cfg.defaultMaxClientRetries)))
     grpU.add_argument(
         '-n', '--nocolor', dest='enableColor', action='store_false',
         help="Disable all color terminal enhancements")
@@ -294,6 +296,17 @@ def main():
             print(c.yellow(
                 "Error: Ignoring configFile `neverPromptCreds` directive because it's not a boolean\n"
                 "  See /usr/share/{}/config.yaml for example".format(cfg.prog)), file=stderr)
+        # Validate maxClientRetries
+        maxClientRetries = cfg.cfgFile.get('maxClientRetries', cfg.defaultMaxClientRetries)
+        if rOpt.maxClientRetries is None:
+            if isinstance(maxClientRetries, int) and maxClientRetries >= 0:
+                rOpt.maxClientRetries = maxClientRetries
+            else:
+                rOpt.maxClientRetries = cfg.defaultMaxClientRetries
+                print(c.yellow(
+                    "Error: Ignoring configFile `maxClientRetries` directive because it's not an int\n"
+                    "  (Using default value: {})\n"
+                    "  See /usr/share/{}/config.yaml for example".format(cfg.defaultMaxClientRetries, cfg.prog)), file=stderr)
     
     # Set sshKeyFile var to none if missing
     cfg.cfgFile['sshKeyFile'] = cfg.cfgFile.get('sshKeyFile', None)

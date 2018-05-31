@@ -6,8 +6,8 @@
 prog = 'ravshello'
 
 # Version info
-__version__ = '1.36.0'
-__date__    = '2018/05/30'
+__version__ = '1.36.1'
+__date__    = '2018/05/31'
 version = "{} v{} last mod {}".format(prog, __version__, __date__)
 
 # Defaults
@@ -15,6 +15,7 @@ defaultUserCfgDir = '~/.ravshello'
 defaultUserCfgFile = 'config.yaml'
 defaultAppExpireTime = 120
 defaultAppExtendTime = 60
+defaultMaxClientRetries = 3
 
 # Some learner mode rules
 maxLearnerPublishedApps = 3
