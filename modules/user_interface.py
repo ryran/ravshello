@@ -1865,9 +1865,9 @@ class Applications(ConfigNode):
                         # Is not BMC blueprint
                         pubLocations = [r for r in pubLocations
                                         if not r['regionName'] in cfg.bmcRegionNames]
-                        # Somewhat ironically, we only add cost-optimized option for admins
-                        if is_admin():
-                            pubLocations.insert(0, {'regionName': "@auto", 'regionDisplayName': "@auto"})
+                    # Somewhat ironically, we only add cost-optimized option for admins
+                    if is_admin():
+                        pubLocations.insert(0, {'regionName': "@auto", 'regionDisplayName': "@auto"})
                     for p in pubLocations:
                         L.append(p['regionDisplayName'].replace(" ", "-"))
                     completions = [a for a in L
@@ -2643,9 +2643,9 @@ class App(ConfigNode):
             # Is not BMC blueprint
             pubLocations = [r for r in pubLocations
                             if not r['regionName'] in cfg.bmcRegionNames]
-            # Somewhat ironically, we only add cost-optimized option for admins
-            if is_admin():
-                pubLocations.insert(0, {'regionName': "@auto", 'regionDisplayName': "@auto"})
+        # Somewhat ironically, we only add cost-optimized option for admins
+        if is_admin():
+            pubLocations.insert(0, {'regionName': "@auto", 'regionDisplayName': "@auto"})
         # Replace spaces in displayName with dashes
         for r in pubLocations:
             r['regionDisplayName'] = r['regionDisplayName'].replace(" ", "-")
@@ -2710,9 +2710,9 @@ class App(ConfigNode):
                 # Is not BMC blueprint
                 pubLocations = [r for r in pubLocations
                                 if not r['regionName'] in cfg.bmcRegionNames]
-                # Somewhat ironically, we only add cost-optimized option for admins
-                if is_admin():
-                    pubLocations.insert(0, {'regionName': "@auto", 'regionDisplayName': "@auto"})
+            # Somewhat ironically, we only add cost-optimized option for admins
+            if is_admin():
+                pubLocations.insert(0, {'regionName': "@auto", 'regionDisplayName': "@auto"})
             for p in pubLocations:
                 L.append(p['regionDisplayName'].replace(" ", "-"))
             completions = [a for a in L
