@@ -146,6 +146,11 @@ def main():
               "and set exit code '5' (note that using this will override an "
               "explicit 'neverPromptCreds=false' setting from a config file)"))
     grpU.add_argument(
+        '-r', '--retries', dest='maxClientRetries', metavar='NUM', type=int, default=3,
+        help=("Raise/lower the http retries setting (default: 3) of ravello_sdk's "
+              "RavelloClient() object, which has retry logic for when a request "
+              "returns http status 401/429, times out, or raises ValueError"))
+    grpU.add_argument(
         '-n', '--nocolor', dest='enableColor', action='store_false',
         help="Disable all color terminal enhancements")
     grpU.add_argument('--cfgdir', dest='userCfgDir', metavar='CFGDIR',

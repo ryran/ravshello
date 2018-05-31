@@ -59,7 +59,7 @@ def login():
     # Simplify
     rOpt = cfg.opts
     # Create client object
-    rClient = ravello_sdk.RavelloClient()
+    rClient = ravello_sdk.RavelloClient(retries=rOpt.maxClientRetries)
     c.verbose("\nConnecting to Ravello . . .", file=stderr)
     cfgUser = cfg.cfgFile.get('ravelloUser', None)
     cfgPass = cfg.cfgFile.get('ravelloPass', None)
