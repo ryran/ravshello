@@ -1588,12 +1588,15 @@ class Applications(ConfigNode):
     
     def __init__(self, parent):
         ConfigNode.__init__(self, 'apps', parent)
-        self.refresh()
+        self.numberOfApps = 0
+        self.numberOfPublishedApps = 0
+        self.isPopulated = False
     
     def refresh(self):
         rCache.purge_app_cache()
         self._children = set([])
-        self.numberOfApps = self.numberOfPublishedApps = 0
+        self.numberOfApps = 0
+        self.numberOfPublishedApps = 0
         for app in rClient.get_applications():
             if is_admin() and rOpt.showAllApps:
                 App(app['name'], self, app['id'])
@@ -1604,19 +1607,26 @@ class Applications(ConfigNode):
                     App(app['name'].replace(appnamePrefix, ''), self, app['id'])
                     if app['published']:
                         self.numberOfPublishedApps += 1
+        self.isPopulated = True
     
     def summary(self):
-        totalActiveVms = get_num_learner_active_vms(user)
-        if not self.numberOfApps:
-            return ("No applications", False)
-        return ("{} active VMs, {} of {} applications published"
-                .format(totalActiveVms, self.numberOfPublishedApps, self.numberOfApps), None)
+        if self.isPopulated:
+            totalActiveVms = get_num_learner_active_vms(user)
+            if not self.numberOfApps:
+                return ("No applications", False)
+            return ("{} active VMs, {} of {} applications published"
+                    .format(totalActiveVms, self.numberOfPublishedApps, self.numberOfApps), None)
+        else:
+            return ("To populate, run: refresh", False)
     
     def ui_command_refresh(self):
         """
-        Poll Ravello for application list, the same as on initial startup.
+        Poll Ravello for application list.
         
-        There are a few situations where this might come in handy:
+        To prevent spurious getApplications API calls (which are rate-limited),
+        the /apps node is no longer auto-populated at startup.
+        
+        There are a few other situations where this might come in handy:
             - If you create or delete apps in the Ravello web UI
             - If you create or delete apps in a separate instance of ravshello
             - If you create or delete apps via the API using some other means
