@@ -1588,42 +1588,100 @@ class Applications(ConfigNode):
     
     def __init__(self, parent):
         ConfigNode.__init__(self, 'apps', parent)
-        self.refresh()
+        self.numberOfApps = 0
+        self.numberOfPublishedApps = 0
+        self.isPopulated = False
     
-    def refresh(self):
+    def refresh(self, appName=None):
         rCache.purge_app_cache()
-        self._children = set([])
-        self.numberOfApps = self.numberOfPublishedApps = 0
-        for app in rClient.get_applications():
+        # If we were passed a specific app ...
+        if appName:
+            # In case of -A, expect appName to be full name
             if is_admin() and rOpt.showAllApps:
-                App(app['name'], self, app['id'])
+                nodeName = appName
+            # If appName starts with our prefix, let's remove that
+            elif appName.startswith(appnamePrefix):
+                nodeName = appName.replace(appnamePrefix, '')
+            # If appName isn't a full name, let's figure that out
+            else:
+                nodeName = appName
+                appName = appnamePrefix + appName
+            # Try to remove app node and if successful, decrement the counter
+            try:
+                self.remove_child(self.get_child(nodeName))
+                self.numberOfApps -= 1
+            except:
+                pass
+            # Try to get the app
+            app = rClient.get_application_by_name(appName)
+            # If we're still here, create the node & increment counters
+            App(nodeName, self, app['id'])
+            if app['published']:
+                self.numberOfPublishedApps += 1
+        # If no app, then, let's do everything
+        else:
+            self._children = set([])
+            self.numberOfApps = 0
+            self.numberOfPublishedApps = 0
+            for app in rClient.get_applications():
+                if is_admin() and rOpt.showAllApps:
+                    nodeName = app['name']
+                elif app['name'].startswith(appnamePrefix):
+                    nodeName = app['name'].replace(appnamePrefix, '')
+                else:
+                    # Not one of our apps, so skip it
+                    continue
+                # Create the node and increment counters
+                App(nodeName, self, app['id'])
                 if app['published']:
                     self.numberOfPublishedApps += 1
-            else:
-                if app['name'].startswith(appnamePrefix):
-                    App(app['name'].replace(appnamePrefix, ''), self, app['id'])
-                    if app['published']:
-                        self.numberOfPublishedApps += 1
+            self.isPopulated = True
     
     def summary(self):
-        totalActiveVms = get_num_learner_active_vms(user)
-        if not self.numberOfApps:
-            return ("No applications", False)
-        return ("{} active VMs, {} of {} applications published"
-                .format(totalActiveVms, self.numberOfPublishedApps, self.numberOfApps), None)
+        numApps = self.numberOfApps
+        noun = "application"
+        if numApps > 1:
+            noun += "s"
+        if self.isPopulated:
+            totalActiveVms = get_num_learner_active_vms(user)
+            if numApps:
+                return ("{} active VMs, {} of {} {} published"
+                        .format(totalActiveVms, self.numberOfPublishedApps, numApps, noun), None)
+            else:
+                return ("No applications", False)
+        else:
+            if numApps:
+                return ("Showing incomplete view ({} {}); to populate all, run: refresh"
+                        .format(numApps, noun), False)
+            else:
+                return ("To populate, run: refresh", False)
     
-    def ui_command_refresh(self):
+    def ui_command_refresh(self, appName='@ALL'):
         """
-        Poll Ravello for application list, the same as on initial startup.
+        Poll Ravello for full application list or get a single application.
         
-        There are a few situations where this might come in handy:
+        To prevent spurious getApplications API calls (which are rate-limited),
+        the /apps node is no longer auto-populated at startup.
+        
+        If you know the name of a specific app you want to access, you can pass
+        it as an argument -- either using the full application name or using the
+        shortened convenience-name. Otherwise, you'll need to refresh without
+        any args, which will get everything you can see.
+        
+        There are a few other situations where this might come in handy:
             - If you create or delete apps in the Ravello web UI
             - If you create or delete apps in a separate instance of ravshello
             - If you create or delete apps via the API using some other means
         """
-        print(c.yellow("\nRefreshing all application data . . . "), end='')
+        appName = self.ui_eval_param(appName, 'string', '@ALL')
+        if appName == '@ALL':
+            appName = None
+        if appName:
+            print(c.yellow("\nAttempting refresh of application data for '{}'. . . ".format(appName)), end='')
+        else:
+            print(c.yellow("\nRefreshing all application data . . . "), end='')
         stdout.flush()
-        self.refresh()
+        self.refresh(appName)
         print(c.green("DONE!\n"))
     
     def ui_command_DELETE_ALL(self, noconfirm='false'):
